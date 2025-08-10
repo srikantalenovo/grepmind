@@ -54,7 +54,7 @@ spec:
       automountServiceAccountToken: true
       containers:
         - name: backend
-          image: srikanta1219/grepmind-backend:v1
+          image: srikanta1219/grepmind-backend:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 5000

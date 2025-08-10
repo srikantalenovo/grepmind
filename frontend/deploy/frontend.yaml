@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: srikanta1219/grepmind-frontend:latest
+          image: srikanta1219/grepmind-frontend:dev
           ports:
             - containerPort: 80
           env:

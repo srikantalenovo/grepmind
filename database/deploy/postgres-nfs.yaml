@@ -44,7 +44,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: srikanta1219/grepmind-db:latest
+          image: srikanta1219/grepmind-db:dev
           ports:
             - containerPort: 5432
           env:
