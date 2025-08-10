@@ -71,6 +71,12 @@ spec:
               value: postgres
             - name: NODE_ENV
               value: production
+            - name: DATABASE_URL
+              value: postgresql://postgres:postgres@grepmind-db:5432/grepmind?schema=public
+            - name: FRONTEND_URL
+              value: http://grepmind.sritechhub.com
+            - name: BACKEND_URL
+              value: http://grepmind.sritechhub.com                                      
 ---
 # 4️⃣ Backend Service
 apiVersion: v1
