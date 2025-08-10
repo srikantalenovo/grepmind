@@ -1,5 +1,5 @@
 # Use Node.js 20 Alpine for a smaller image
-FROM node:20-alpine
+FROM node:20-slim
 
 # Set working directory
 WORKDIR /app
