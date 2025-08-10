@@ -1,59 +1,87 @@
 import bcrypt from 'bcrypt';
-import prisma from '../config/db.js';
-import { generateAccessToken, generateRefreshToken, hashToken } from '../utils/tokens.js';
+import prisma from '../config/prisma.js';
+import { generateAccessToken, generateRefreshPlain, hashRefresh, refreshExpiryDate } from '../utils/tokens.js';
 
 const SALT_ROUNDS = 12;
 
-export async function registerUser({ email, password, name }) {
+export async function registerUser({ email, password, name, role = 'viewer' }) {
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new Error('Email already registered');
-
+  if (existing) {
+    const e = new Error('Email already registered');
+    e.status = 400;
+    throw e;
+  }
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-  const user = await prisma.user.create({ data: { email, name, passwordHash } });
+  const user = await prisma.user.create({
+    data: { email, name, passwordHash, role }
+  });
   return user;
 }
 
 export async function loginUser({ email, password }) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) throw new Error('Invalid credentials');
-
+  if (!user) {
+    const e = new Error('Invalid credentials');
+    e.status = 400;
+    throw e;
+  }
   const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) throw new Error('Invalid credentials');
+  if (!ok) {
+    const e = new Error('Invalid credentials');
+    e.status = 400;
+    throw e;
+  }
 
   const accessToken = generateAccessToken({ userId: user.id, role: user.role });
-  const refreshPlain = generateRefreshToken();
-  const refreshHash = hashToken(refreshPlain);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  const refreshPlain = generateRefreshPlain();
+  const refreshHash = hashRefresh(refreshPlain);
+  const expiresAt = refreshExpiryDate();
 
-  await prisma.refreshToken.create({ data: { userId: user.id, tokenHash: refreshHash, expiresAt } });
+  await prisma.refreshToken.create({
+    data: { tokenHash: refreshHash, userId: user.id, expiresAt }
+  });
 
   return { user, accessToken, refreshToken: refreshPlain };
 }
 
-export async function refreshTokens(oldTokenPlain) {
-  const oldHash = hashToken(oldTokenPlain);
+export async function rotateRefreshToken(oldPlain) {
+  const oldHash = hashRefresh(oldPlain);
   const dbToken = await prisma.refreshToken.findUnique({ where: { tokenHash: oldHash } });
-  if (!dbToken) throw new Error('Invalid token');
-  if (dbToken.revokedAt || dbToken.expiresAt < new Date()) throw new Error('Token expired or revoked');
+  if (!dbToken) {
+    const e = new Error('Invalid refresh token');
+    e.status = 401;
+    throw e;
+  }
+  if (dbToken.revokedAt || dbToken.expiresAt < new Date()) {
+    const e = new Error('Refresh token expired or revoked');
+    e.status = 401;
+    throw e;
+  }
 
   const user = await prisma.user.findUnique({ where: { id: dbToken.userId } });
-  if (!user) throw new Error('User not found');
 
-  // rotate
-  const newPlain = generateRefreshToken();
-  const newHash = hashToken(newPlain);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const newPlain = generateRefreshPlain();
+  const newHash = hashRefresh(newPlain);
+  const expiresAt = refreshExpiryDate();
 
-  await prisma.$transaction(async (prismaTx) => {
-    const created = await prismaTx.refreshToken.create({ data: { userId: user.id, tokenHash: newHash, expiresAt } });
-    await prismaTx.refreshToken.update({ where: { id: dbToken.id }, data: { revokedAt: new Date(), replacedBy: created.id } });
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.refreshToken.create({
+      data: { tokenHash: newHash, userId: user.id, expiresAt }
+    });
+    await tx.refreshToken.update({
+      where: { id: dbToken.id },
+      data: { revokedAt: new Date(), replacedBy: created.id }
+    });
   });
 
   const accessToken = generateAccessToken({ userId: user.id, role: user.role });
-  return { accessToken, refreshToken: newPlain, user };
+  return { user, accessToken, refreshToken: newPlain };
 }
 
-export async function revokeRefreshToken(tokenPlain) {
-  const hash = hashToken(tokenPlain);
-  await prisma.refreshToken.updateMany({ where: { tokenHash: hash, revokedAt: null }, data: { revokedAt: new Date() } });
+export async function revokeRefreshToken(plain) {
+  const hash = hashRefresh(plain);
+  await prisma.refreshToken.updateMany({
+    where: { tokenHash: hash, revokedAt: null },
+    data: { revokedAt: new Date() }
+  });
 }
