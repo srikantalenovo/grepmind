@@ -1,0 +1,86 @@
+# 1️⃣ ServiceAccount for backend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grepmind-sa
+  namespace: grepmind
+---
+# grepmind-admin-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grepmind-admin-role
+rules:
+  - apiGroups: [""] # Core API group
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grepmind-admin-binding
+subjects:
+  - kind: ServiceAccount
+    name: grepmind-sa
+    namespace: grepmind
+roleRef:
+  kind: ClusterRole
+  name: grepmind-admin-role
+  apiGroup: rbac.authorization.k8s.io
+
+
+
+---
+# 3️⃣ Backend Deployment using grepmind-sa
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grepmind-backend
+  namespace: grepmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grepmind-backend
+  template:
+    metadata:
+      labels:
+        app: grepmind-backend
+    spec:
+      serviceAccountName: grepmind-sa   # ✅ Use our admin SA
+      automountServiceAccountToken: true
+      containers:
+        - name: backend
+          image: srikanta1219/grepmind-backend:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DB_HOST
+              value: postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: grepmind
+            - name: DB_USER
+              value: postgres
+            - name: DB_PASSWORD
+              value: postgres
+            - name: NODE_ENV
+              value: production
+---
+# 4️⃣ Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grepmind-backend
+  namespace: grepmind
+spec:
+  selector:
+    app: grepmind-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
