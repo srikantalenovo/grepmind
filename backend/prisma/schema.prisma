@@ -29,12 +29,13 @@ enum Role {
 }
 
 model RefreshToken {
-  id         String   @id @default(uuid())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  revokedAt  DateTime?
-  replacedBy String?
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String
+  expiry    DateTime
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("refresh_tokens")
 }
