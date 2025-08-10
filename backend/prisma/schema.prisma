@@ -17,7 +17,7 @@ model User {
   isActive      Boolean  @default(true)   @map("is_active")
   createdAt     DateTime @default(now())  @map("created_at")
   updatedAt     DateTime @updatedAt       @map("updated_at")
-  refreshTokens RefreshToken[]
+  refreshToken  RefreshToken[]
 
   @@map("User")
 }
@@ -37,5 +37,5 @@ model RefreshToken {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@map("refresh_tokens")
+  @@map("RefreshToken")
 }
