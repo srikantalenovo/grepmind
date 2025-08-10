@@ -25,21 +25,21 @@ buildpush:
 	@echo "🔨 Building fresh images..."
 	docker-compose -f $(COMPOSE_FILE) build --no-cache
 	@echo "🔨 tag fresh images..."
-	docker tag k8s-dashboard_db:latest srikanta1219/grepmind-db:latest
-	docker tag k8s-dashboard_backend:latest srikanta1219/grepmind-backend:latest
-	docker tag k8s-dashboard_frontend:latest srikanta1219/grepmind-frontend:latest
+	docker tag grepmind_db:latest srikanta1219/grepmind-db:dev
+	docker tag grepmind_backend:latest srikanta1219/grepmind-backend:dev
+	docker tag grepmind_frontend:latest srikanta1219/grepmind-frontend:dev
 	@echo "🔨 Publish image to dockerhub "
-	docker push srikanta1219/grepmind-db:latest
-	docker push srikanta1219/grepmind-backend:latest
-	docker push srikanta1219/grepmind-frontend:latest
+	docker push srikanta1219/grepmind-db:dev
+	docker push srikanta1219/grepmind-backend:dev
+	docker push srikanta1219/grepmind-frontend:dev
 	@echo "🔨 Removing image from local "
-	docker rmi srikanta1219/grepmind-db:latest
-	docker rmi srikanta1219/grepmind-backend:latest
-	docker rmi srikanta1219/grepmind-frontend:latest	
+	docker rmi srikanta1219/grepmind-db:dev
+	docker rmi srikanta1219/grepmind-backend:dev
+	docker rmi srikanta1219/grepmind-frontend:dev	
 
-	docker rmi k8s-dashboard_db:latest
-	docker rmi k8s-dashboard_backend:latest
-	docker rmi k8s-dashboard_frontend:latest
+	docker rmi grepmind_db:latest
+	docker rmi grepmind_backend:latest
+	docker rmi grepmind_frontend:latest
 
 # Start fresh containers
 up:
@@ -52,11 +52,11 @@ build-frontend:
 	@echo "🔨 Building frontend images..."
 	docker-compose build --no-cache frontend
 	@echo "🔨 tag fresh images..."
-	docker tag k8s-dashboard_frontend:latest srikanta1219/grepmind-frontend:latest
+	docker tag grepmind_frontend:latest srikanta1219/grepmind-frontend:dev
 	@echo "🔨 Publish image to dockerhub "
-	docker push srikanta1219/grepmind-frontend:latest
+	docker push srikanta1219/grepmind-frontend:dev
 	@echo "🔨 Removing image from local "
-	docker rmi srikanta1219/grepmind-frontend:latest
+	docker rmi srikanta1219/grepmind-frontend:dev
 
 
 # Just build without cache
@@ -64,8 +64,8 @@ build-backend:
 	@echo "🔨 Building backend images..."
 	docker-compose build --no-cache backend
 	@echo "🔨 tag fresh images..."
-	docker tag k8s-dashboard_backend:latest srikanta1219/grepmind-backend:v1
+	docker tag grepmind_backend:latest srikanta1219/grepmind-backend:dev
 	@echo "🔨 Publish image to dockerhub "
-	docker push srikanta1219/grepmind-backend:v1
+	docker push srikanta1219/grepmind-backend:dev
 	@echo "🔨 Removing image from local "
-	docker rmi srikanta1219/grepmind-backend:v1
+	docker rmi srikanta1219/grepmind-backend:dev
