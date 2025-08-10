@@ -57,6 +57,7 @@ build-frontend:
 	docker push srikanta1219/grepmind-frontend:dev
 	@echo "🔨 Removing image from local "
 	docker rmi srikanta1219/grepmind-frontend:dev
+	docker rmi grepmind_frontend:latest
 
 
 # Just build without cache
@@ -69,3 +70,16 @@ build-backend:
 	docker push srikanta1219/grepmind-backend:dev
 	@echo "🔨 Removing image from local "
 	docker rmi srikanta1219/grepmind-backend:dev
+	docker rmi grepmind_backend:latest
+
+# Just build without cache
+build-database:
+	@echo "🔨 Building backend images..."
+	docker-compose build --no-cache database
+	@echo "🔨 tag fresh images..."
+	docker tag grepmind_database:latest srikanta1219/grepmind-db:dev
+	@echo "🔨 Publish image to dockerhub "
+	docker push srikanta1219/grepmind-db:dev
+	@echo "🔨 Removing image from local "
+	docker rmi srikanta1219/grepmind-db:dev
+	docker rmi grepmind_database:latest
