@@ -20,6 +20,12 @@ model User {
   refreshTokens RefreshToken[]
 }
 
+enum Role {
+  admin
+  editor
+  viewer
+}
+
 model RefreshToken {
   id         String   @id @default(uuid())
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
