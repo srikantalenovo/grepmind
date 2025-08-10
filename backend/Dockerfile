@@ -1,23 +1,18 @@
-# Use Node.js 20 Alpine for a smaller image
 FROM node:20-slim
 
-# Set working directory
+# Install required packages, including OpenSSL 1.1
+RUN apt-get update -y && \
+    apt-get install -y wget curl gnupg openssl libssl1.1 && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy package.json and package-lock.json first for caching
 COPY package*.json ./
-
-# Install dependencies (including Prisma CLI)
 RUN npm install
 
-# Copy the entire backend source
 COPY . .
 
-# Generate Prisma client
 RUN npx prisma generate
 
-# Expose API port
 EXPOSE 5000
-
-# Start backend
 CMD ["npm", "start"]
