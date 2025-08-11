@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { AuthContext } from '../context/AuthContext';
 
 export default function Signup() {
-  const { signup } = useAuth();
+  const { signup } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
