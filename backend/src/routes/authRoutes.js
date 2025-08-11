@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import prisma from "../prismaClient.js";
+import requireAuth from '../middleware/requireAuth.js';
 
 const router = express.Router();
 
@@ -82,5 +83,10 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+router.get('/me', requireAuth, async (req, res) => {
+  res.json({ user: req.user });
+});
+
 
 export default router;

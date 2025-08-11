@@ -1,49 +1,52 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Dashboard from "./pages/Dashboard";
-import ProtectedRoute from "./components/ProtectedRoute";
-import Navbar from "./components/Navbar";
-import { AuthProvider } from "./context/AuthContext";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import RoleProtectedRoute from './components/RoleProtectedRoute';
+import Navbar from './components/Navbar';
+import Dashboard from './pages/Dashboard';
+import AdminPanel from './pages/AdminPanel';
+import EditorTools from './pages/EditorTools';
+import Unauthorized from './pages/Unauthorized';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
 
-export default function App() {
+function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <Navbar /> {/* Always visible when logged in */}
-        <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+    <Router>
+      <Navbar />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
 
-          {/* Protected Routes */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/projects"
-            element={
-              <ProtectedRoute>
-                <div className="p-10">Projects Page</div>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <div className="p-10">Settings Page</div>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </Router>
-    </AuthProvider>
+        <Route
+          path="/dashboard"
+          element={
+            <RoleProtectedRoute allowedRoles={['admin', 'editor', 'viewer']}>
+              <Dashboard />
+            </RoleProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <RoleProtectedRoute allowedRoles={['admin']}>
+              <AdminPanel />
+            </RoleProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/editor"
+          element={
+            <RoleProtectedRoute allowedRoles={['admin', 'editor']}>
+              <EditorTools />
+            </RoleProtectedRoute>
+          }
+        />
+
+        <Route path="/unauthorized" element={<Unauthorized />} />
+      </Routes>
+    </Router>
   );
 }
+
+export default App;

@@ -1,96 +1,73 @@
-import React, { useState, useContext } from "react";
-import { AuthContext } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function Signup() {
-  const { signup } = useContext(AuthContext);
+  const { signup } = useAuth();
   const navigate = useNavigate();
 
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("viewer");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState('viewer'); // default role
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
+    setLoading(true);
+    setError(null);
 
     try {
-      await signup(name, email, password, role);
-      navigate("/dashboard");
+      await signup({ name, email, password, role });
+      navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || "Signup failed");
+      console.error(err);
+      setError(err.response?.data?.message || 'Signup failed');
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="flex h-screen">
-      {/* Left side */}
-      <div className="w-1/2 bg-gradient-to-br from-indigo-600 to-purple-500 flex flex-col justify-center items-center text-white p-10">
-        <h1 className="text-5xl font-bold mb-4">Create Account</h1>
-        <p className="text-lg opacity-80">Join us and explore</p>
-      </div>
+    <div className="auth-container">
+      <h1>Sign Up</h1>
+      {error && <p className="error">{error}</p>}
+      <form onSubmit={handleSubmit}>
+        <label>Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
 
-      {/* Right side */}
-      <div className="w-1/2 flex justify-center items-center p-10">
-        <form className="w-full max-w-sm space-y-5" onSubmit={handleSubmit}>
-          <h2 className="text-2xl font-bold">Sign Up</h2>
+        <label>Email</label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
 
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+        <label>Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
 
-          <input
-            type="text"
-            placeholder="Name"
-            className="w-full border p-2 rounded"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
+        <label>Role</label>
+        <select value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
 
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full border p-2 rounded"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-
-          <input
-            type="password"
-            placeholder="Password"
-            className="w-full border p-2 rounded"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-
-          <select
-            className="w-full border p-2 rounded"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          >
-            <option value="admin">ADMIN</option>
-            <option value="editor">EDITOR</option>
-            <option value="viewer">VIEWER</option>
-          </select>
-
-          <button
-            type="submit"
-            className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700"
-          >
-            Sign Up
-          </button>
-
-          <p className="text-sm">
-            Already have an account?{" "}
-            <a href="/login" className="text-purple-600 hover:underline">
-              Login
-            </a>
-          </p>
-        </form>
-      </div>
+        <button type="submit" disabled={loading}>
+          {loading ? 'Signing up...' : 'Sign Up'}
+        </button>
+      </form>
     </div>
   );
 }
