@@ -5,7 +5,7 @@ networks:
     driver: bridge
 
 services:
-  db:
+  database:
     build: ./database
     container_name: grepmind-db
     environment:
@@ -36,7 +36,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@grepmind-db:5432/grepmind?schema=public
       FRONTEND_URL: http://grepmind.sritechhub.com
     depends_on:
-      - db
+      - database
     networks:
       - app_network       
       
