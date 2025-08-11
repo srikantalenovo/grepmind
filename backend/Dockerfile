@@ -36,7 +36,7 @@ RUN apt-get update -y && \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install react-icons
+RUN npm install 
 
 COPY . .
 
