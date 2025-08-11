@@ -1,71 +1,87 @@
-import React, { useContext, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import React, { useState, useContext } from "react";
+import { AuthContext } from "../context/AuthContext";
+import { FaUser, FaEnvelope, FaLock } from "react-icons/fa";
+import backgroundImg from "../assets/signup-bg.jpg"; // Add your image in src/assets
 
 export default function Signup() {
   const { signup } = useContext(AuthContext);
-  const navigate = useNavigate();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("USER");
 
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState('viewer'); // default role
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    try {
-      await signup({ name, email, password, role });
-      navigate('/dashboard');
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || 'Signup failed');
-    } finally {
-      setLoading(false);
-    }
-  }
+    await signup(name, email, password, role);
+  };
 
   return (
-    <div className="auth-container">
-      <h1>Sign Up</h1>
-      {error && <p className="error">{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <label>Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+    <div
+      className="flex justify-center items-center min-h-screen bg-cover bg-center"
+      style={{ backgroundImage: `url(${backgroundImg})` }}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white bg-opacity-90 shadow-lg rounded-lg p-8 w-full max-w-md"
+      >
+        <h2 className="text-3xl font-bold text-center mb-6 text-purple-700">
+          Create Account
+        </h2>
 
-        <label>Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+        <div className="flex items-center mb-4 border-b border-gray-300">
+          <FaUser className="text-purple-500 mr-3" />
+          <input
+            type="text"
+            placeholder="Full Name"
+            className="w-full py-2 bg-transparent focus:outline-none"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </div>
 
-        <label>Password</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <div className="flex items-center mb-4 border-b border-gray-300">
+          <FaEnvelope className="text-purple-500 mr-3" />
+          <input
+            type="email"
+            placeholder="Email Address"
+            className="w-full py-2 bg-transparent focus:outline-none"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
 
-        <label>Role</label>
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="viewer">Viewer</option>
-          <option value="editor">Editor</option>
-          <option value="admin">Admin</option>
-        </select>
+        <div className="flex items-center mb-4 border-b border-gray-300">
+          <FaLock className="text-purple-500 mr-3" />
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full py-2 bg-transparent focus:outline-none"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
 
-        <button type="submit" disabled={loading}>
-          {loading ? 'Signing up...' : 'Sign Up'}
+        <div className="mb-6">
+          <label className="block mb-2 text-gray-700">Role</label>
+          <select
+            className="w-full p-2 border rounded"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
+            <option value="USER">User</option>
+            <option value="EDITOR">Editor</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold"
+        >
+          Sign Up
         </button>
       </form>
     </div>
