@@ -1,46 +1,59 @@
--- Create ENUM for role if it doesn't exist
+-- ================================
+-- init.sql for Prisma schema
+-- ================================
+
+-- Create enum type if not exists
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Role') THEN
-        CREATE TYPE Role AS ENUM ('admin', 'editor', 'viewer');
+        CREATE TYPE "Role" AS ENUM ('admin', 'editor', 'viewer');
     END IF;
-END
-$$;
+END$$;
 
 -- Create users table
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS "users" (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT UNIQUE NOT NULL,
     name TEXT,
     "passwordHash" TEXT NOT NULL,
-    role "Role" DEFAULT 'viewer',
-    "isActive" BOOLEAN DEFAULT TRUE,
-    "createdAt" TIMESTAMP DEFAULT NOW(),
-    "updatedAt" TIMESTAMP DEFAULT NOW()
+    role "Role" NOT NULL DEFAULT 'viewer',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Create refresh_tokens table
-CREATE TABLE IF NOT EXISTS refresh_tokens (
+CREATE TABLE IF NOT EXISTS "refresh_tokens" (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "tokenHash" TEXT UNIQUE NOT NULL,
-    "userId" UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    "expiresAt" TIMESTAMP NOT NULL,
-    "createdAt" TIMESTAMP DEFAULT NOW(),
-    "revokedAt" TIMESTAMP,
-    "replacedBy" TEXT
+    "userId" UUID NOT NULL,
+    "expiresAt" TIMESTAMPTZ NOT NULL,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "revokedAt" TIMESTAMPTZ,
+    "replacedBy" TEXT,
+    CONSTRAINT fk_user FOREIGN KEY ("userId") REFERENCES "users"(id) ON DELETE CASCADE
 );
 
--- Insert default admin if not exists
-DO $$
-DECLARE
-    hashed_password TEXT;
+-- Trigger function to auto-update "updatedAt" column in users
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM users WHERE Role = 'admin') THEN
-        -- Default password is: Admin@123
-        SELECT crypt('Admin@123', gen_salt('bf', 10)) INTO hashed_password;
+   NEW."updatedAt" = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
 
-        INSERT INTO users (email, name, "passwordHash", role)
-        VALUES ('admin@gmail.com', 'Default Admin', hashed_password, 'admin');
+-- Attach trigger to users table
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'set_updated_at'
+    ) THEN
+        CREATE TRIGGER set_updated_at
+        BEFORE UPDATE ON "users"
+        FOR EACH ROW
+        EXECUTE PROCEDURE update_updated_at_column();
     END IF;
-END
-$$;
+END$$;
