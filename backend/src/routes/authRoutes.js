@@ -5,7 +5,6 @@ import prisma from "../prismaClient.js";
 
 const router = express.Router();
 
-// Helper to generate tokens
 const generateTokens = (userId) => {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: "15m",
@@ -16,8 +15,8 @@ const generateTokens = (userId) => {
   return { accessToken, refreshToken };
 };
 
-// Register
-router.post("/register", async (req, res) => {
+// ✅ Signup
+router.post("/signup", async (req, res) => {
   try {
     const { email, name, password, role } = req.body;
 
@@ -49,12 +48,12 @@ router.post("/register", async (req, res) => {
 
     res.json({ accessToken, refreshToken, user });
   } catch (error) {
-    console.error("Register error:", error);
+    console.error("Signup error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Login
+// ✅ Login
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;

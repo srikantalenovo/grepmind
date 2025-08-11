@@ -3,7 +3,7 @@ FROM node:20-slim
 ENV NODE_ENV=production
 ENV PORT=5000
 ENV FRONTEND_URL=http://grepmind.sritechhub.com
-ENV BACKEND_URL=http://grepmind.sritechhub.com
+ENV BACKEND_URL=http://grepmind.sritechhub.com/api
 
 # Database (service name inside k8s namespace)
 ENV DATABASE_URL=postgresql://postgres:postgres@grepmind-db:5432/grepmind?schema=public
