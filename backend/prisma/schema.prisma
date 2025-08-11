@@ -17,7 +17,7 @@ model User {
   id            String         @id @default(uuid())
   email         String         @unique
   name          String?
-  passwordHash  String         @map("password_hash")
+  passwordHash  String
   role          Role           @default(viewer)
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())

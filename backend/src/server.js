@@ -1,8 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import prisma from "./prismaClient.js";
 import authRoutes from "./routes/authRoutes.js";
+import prisma from "./prismaClient.js";
 
 dotenv.config();
 
@@ -10,42 +10,41 @@ const app = express();
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
 
-// 🛠 Logging middleware (for debugging requests)
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  if (Object.keys(req.body || {}).length > 0) {
-    console.log("Body:", req.body);
-  }
-  next();
+// Health check route
+app.get("/", (req, res) => {
+  res.json({ message: "Backend server is running" });
 });
 
 // API routes
 app.use("/api/auth", authRoutes);
 
-// Health check
-app.get("/", (req, res) => {
-  res.json({ message: "Backend server is running" });
-});
-
-// ✅ Function to test DB connection
-async function initServer() {
+// Database init + extension check
+async function initDatabase() {
   try {
-    console.log("🔄 Connecting to database...");
-    await prisma.$connect();
-    console.log("✅ Database connection successful!");
+    console.log("📡 Connecting to database...");
+    await prisma.$queryRaw`SELECT 1`; // Simple test query
+    console.log("✅ Database connection successful");
 
-    // Optional: check if User table exists & has rows
-    const userCount = await prisma.user.count();
-    console.log(`📊 User table found with ${userCount} records.`);
+    // Ensure pgcrypto extension exists
+    await prisma.$executeRaw`CREATE EXTENSION IF NOT EXISTS pgcrypto;`;
+    console.log("🔐 pgcrypto extension ensured");
 
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
+    // Check if tables exist
+    const tables = await prisma.$queryRaw`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public';
+    `;
+    console.log("📋 Existing tables:", tables.map(t => t.table_name).join(", ") || "None");
+
   } catch (error) {
-    console.error("❌ Database connection failed:", error);
-    process.exit(1); // Stop server if DB is not connected
+    console.error("❌ Database initialization failed:", error);
+    process.exit(1);
   }
 }
 
-initServer();
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, async () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  await initDatabase();
+});
