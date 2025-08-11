@@ -1,8 +1,8 @@
 -- Create ENUM for role if it doesn't exist
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'role') THEN
-        CREATE TYPE role AS ENUM ('admin', 'editor', 'viewer');
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Role') THEN
+        CREATE TYPE Role AS ENUM ('admin', 'editor', 'viewer');
     END IF;
 END
 $$;
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     name TEXT,
     "passwordHash" TEXT NOT NULL,
-    role role DEFAULT 'viewer',
+    role "Role" DEFAULT 'viewer',
     "isActive" BOOLEAN DEFAULT TRUE,
     "createdAt" TIMESTAMP DEFAULT NOW(),
     "updatedAt" TIMESTAMP DEFAULT NOW()
@@ -35,7 +35,7 @@ DO $$
 DECLARE
     hashed_password TEXT;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin') THEN
+    IF NOT EXISTS (SELECT 1 FROM users WHERE Role = 'admin') THEN
         -- Default password is: Admin@123
         SELECT crypt('Admin@123', gen_salt('bf', 10)) INTO hashed_password;
 
