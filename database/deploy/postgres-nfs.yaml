@@ -45,6 +45,7 @@ spec:
       containers:
         - name: postgres
           image: srikanta1219/grepmind-db:dev
+          imagePullPolicy: Always
           ports:
             - containerPort: 5432
           env:

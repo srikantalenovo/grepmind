@@ -15,6 +15,7 @@ spec:
       containers:
         - name: frontend
           image: srikanta1219/grepmind-frontend:dev
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:
