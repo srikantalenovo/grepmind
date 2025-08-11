@@ -1,52 +1,61 @@
-version: '3.9'
+version: '3.8'
+
+networks:
+  app_network:
+    driver: bridge
 
 services:
-  database:
-    build:
-      context: ./database
-      dockerfile: Dockerfile
+  db:
+    build: ./database
     container_name: grepmind-db
-    restart: unless-stopped
-    env_file:
-      - ./database/.env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: grepmind
     ports:
-      - "5432:5432"
+      - "5432:5432" 
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network      
+
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: grepmind-backend
-    restart: unless-stopped
-    env_file:
-      - ./backend/.env
-    depends_on:
-      - database
     ports:
       - "5000:5000"
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    command: ["node", "--watch", "server.js"]
+    environment:
+      DB_HOST: grepmind-db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: grepmind
+      NODE_ENV: development
+      ACCESS_TOKEN_SECRET: d211f689bfda98fe5dd3146713e021f20cf380ca6581e05c93a3f6d68920033ed957bf22fc59799a9e40d17b15e994e3462868a6e1fb379dd5804a7079746189
+      REFRESH_TOKEN_SECRET: 3e3e147c55cac2bcdc2ede23f8715044fc34db60f0b4f8aa490128601780069c37514f5ddc11d4e7a3d2b9a736fc22814de10a9a97672c5caf5af5f662c7a2d0
+      DATABASE_URL: postgresql://postgres:postgres@grepmind-db:5432/grepmind?schema=public
+      FRONTEND_URL: http://grepmind.sritechhub.com
+    depends_on:
+      - db
+    networks:
+      - app_network       
+      
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: grepmind-frontend
-    restart: unless-stopped
-    env_file:
-      - ./frontend/.env
+    build: ./frontend
+    container_name: grepmind-frontend  
+    environment:
+      REACT_APP_API_URL: http://grepmind.sritechhub.com
+      VITE_API_URL: http://grepmind.sritechhub.com/api
+      FRONTEND_URL: http://grepmind.sritechhub.com   
+    ports:
+      - "3000:80"
     depends_on:
       - backend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: ["npm", "run", "dev"]
+    networks:
+      - app_network       
+       
 
 volumes:
-  db_data:
+  postgres_data:
+   
