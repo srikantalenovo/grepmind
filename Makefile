@@ -50,36 +50,36 @@ up:
 # Just build without cache
 build-frontend:
 	@echo "🔨 Building frontend images..."
-	docker-compose build --no-cache frontend
+	docker build --no-cache -f ./frontend/Dockerfile -t grepmind-frontend:latest ./frontend
 	@echo "🔨 tag fresh images..."
-	docker tag grepmind_frontend:latest srikanta1219/grepmind-frontend:dev
+	docker tag grepmind-frontend:latest srikanta1219/grepmind-frontend:dev
 	@echo "🔨 Publish image to dockerhub "
 	docker push srikanta1219/grepmind-frontend:dev
 	@echo "🔨 Removing image from local "
 	docker rmi srikanta1219/grepmind-frontend:dev
-	docker rmi grepmind_frontend:latest
+	docker rmi grepmind-frontend:latest
 
 
 # Just build without cache
 build-backend:
 	@echo "🔨 Building backend images..."
-	docker-compose build --no-cache backend
+	docker build --no-cache -f ./backend/Dockerfile -t grepmind-backend:latest ./backend
 	@echo "🔨 tag fresh images..."
-	docker tag grepmind_backend:latest srikanta1219/grepmind-backend:dev
+	docker tag grepmind-backend:latest srikanta1219/grepmind-backend:dev
 	@echo "🔨 Publish image to dockerhub "
 	docker push srikanta1219/grepmind-backend:dev
 	@echo "🔨 Removing image from local "
 	docker rmi srikanta1219/grepmind-backend:dev
-	docker rmi grepmind_backend:latest
+	docker rmi grepmind-backend:latest
 
 # Just build without cache
 build-database:
 	@echo "🔨 Building backend images..."
-	docker-compose build --no-cache database
+	docker build --no-cache -f ./database/Dockerfile -t grepmind-database:latest ./database
 	@echo "🔨 tag fresh images..."
-	docker tag grepmind_database:latest srikanta1219/grepmind-db:dev
+	docker tag grepmind-database:latest srikanta1219/grepmind-db:dev
 	@echo "🔨 Publish image to dockerhub "
 	docker push srikanta1219/grepmind-db:dev
 	@echo "🔨 Removing image from local "
 	docker rmi srikanta1219/grepmind-db:dev
-	docker rmi grepmind_database:latest
+	docker rmi grepmind-database:latest
