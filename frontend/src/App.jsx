@@ -1,30 +1,28 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider } from './context/AuthContext';
 
 function Dashboard() {
-  return <div className="p-4">Welcome to GrepMind dashboard (protected)</div>;
+  return <div className="p-6">Welcome — protected dashboard</div>;
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-2xl mx-auto py-8">
-          <h1 className="text-2xl font-bold mb-6">GrepMind</h1>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route element={<ProtectedRoute />}>
+      <BrowserRouter>
+        <div className="min-h-screen bg-gradient-to-tr from-slate-50 to-sky-50 flex items-center justify-center">
+          <div className="w-full max-w-2xl p-6">
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
               <Route path="/dashboard" element={<Dashboard />} />
-            </Route>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </div>
         </div>
-      </div>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

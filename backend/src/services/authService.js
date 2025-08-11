@@ -65,13 +65,8 @@ export async function rotateRefreshToken(oldPlain) {
   const expiresAt = refreshExpiryDate();
 
   await prisma.$transaction(async (tx) => {
-    const created = await tx.refreshToken.create({
-      data: { tokenHash: newHash, userId: user.id, expiresAt }
-    });
-    await tx.refreshToken.update({
-      where: { id: dbToken.id },
-      data: { revokedAt: new Date(), replacedBy: created.id }
-    });
+    const created = await tx.refreshToken.create({ data: { tokenHash: newHash, userId: user.id, expiresAt } });
+    await tx.refreshToken.update({ where: { id: dbToken.id }, data: { revokedAt: new Date(), replacedBy: created.id } });
   });
 
   const accessToken = generateAccessToken({ userId: user.id, role: user.role });
