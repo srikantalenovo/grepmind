@@ -9,9 +9,6 @@ import {
 
 /**
  * Get Kubernetes resources by type, cluster namespace, and optional search term.
- * @param {string} namespace - Namespace to filter resources.
- * @param {string} resourceType - Type of Kubernetes resource.
- * @param {string} search - Optional search term to filter resource names.
  */
 export const getResources = async (namespace, resourceType, search) => {
   let items = [];
@@ -59,19 +56,21 @@ export const getResources = async (namespace, resourceType, search) => {
         break;
 
       case 'helmreleases':
-        // Helm releases via Helm SDK are not in Kubernetes API directly — stored as secrets/configmaps in kube-system
         const secrets = (await coreV1Api.listNamespacedSecret(namespace)).body.items;
         items = secrets.filter(s => s.metadata?.labels?.owner === 'helm');
         break;
 
       case 'sparkapplications':
-        // SparkApplications are a CRD
         items = (await customObjectsApi.listNamespacedCustomObject(
           'sparkoperator.k8s.io',
           'v1beta2',
           namespace,
           'sparkapplications'
         )).body.items;
+        break;
+
+      case 'nodes': // NEW
+        items = (await coreV1Api.listNode()).body.items;
         break;
 
       default:
@@ -87,13 +86,26 @@ export const getResources = async (namespace, resourceType, search) => {
 
     return items.map(item => ({
       name: item.metadata?.name || 'Unnamed',
-      namespace: item.metadata?.namespace || namespace,
+      namespace: item.metadata?.namespace || namespace || 'cluster-wide',
       status: getResourceStatus(resourceType, item),
       age: getAge(item.metadata?.creationTimestamp),
     }));
 
   } catch (err) {
     console.error(`[ERROR] Failed to fetch ${resourceType} in ${namespace}:`, err.message);
+    throw err;
+  }
+};
+
+/**
+ * List all namespaces in the cluster.
+ */
+export const listNamespaces = async () => {
+  try {
+    const res = await coreV1Api.listNamespace();
+    return res.body.items.map(ns => ns.metadata?.name);
+  } catch (err) {
+    console.error('[ERROR] Failed to list namespaces:', err.message);
     throw err;
   }
 };
@@ -112,15 +124,12 @@ function getResourceStatus(resourceType, item) {
     case 'jobs':
     case 'cronjobs':
       return item.status?.succeeded > 0 ? 'Succeeded' : 'Running';
-    case 'services':
-    case 'configmaps':
-    case 'persistentvolumeclaims':
-    case 'ingress':
-    case 'helmreleases':
-    case 'sparkapplications':
-      return 'Running';
+    case 'nodes':
+      return item.status?.conditions?.find(c => c.type === 'Ready')?.status === 'True'
+        ? 'Ready'
+        : 'NotReady';
     default:
-      return 'Unknown';
+      return 'Running';
   }
 }
 

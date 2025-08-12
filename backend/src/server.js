@@ -5,6 +5,7 @@ import authRoutes from "./routes/authRoutes.js";
 import prisma from "./prismaClient.js";
 import adminRoutes from './routes/adminRoutes.js';
 import resourcesRoutes from "./routes/resourcesRoutes.js";
+import clusterRoutes from './routes/clusterRoutes.js';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use("/api/resources", resourcesRoutes);
+app.use('/api/cluster', clusterRoutes);
 
 // Database init + extension check
 async function initDatabase() {
