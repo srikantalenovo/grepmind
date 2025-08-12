@@ -1,6 +1,6 @@
 // src/context/AuthContext.js
 import React, { createContext, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // ✅ For smart redirect
+import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 
 export const AuthContext = createContext();
@@ -10,24 +10,39 @@ export const AuthProvider = ({ children }) => {
   const [accessToken, setAccessToken] = useState(null);
   const [initializing, setInitializing] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Load stored token/user when app starts
+  // Restore user & token on app start
   useEffect(() => {
     const storedToken = localStorage.getItem("accessToken");
     const storedUser = localStorage.getItem("user");
 
     if (storedToken && storedUser) {
-      setAccessToken(storedToken);
-      setUser(JSON.parse(storedUser));
-
-      // Set axios default header
-      axios.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser?.role) {
+          setAccessToken(storedToken);
+          setUser(parsedUser);
+          axios.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+        } else {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("user");
+        }
+      } catch {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+      }
     }
+
     setInitializing(false);
   }, []);
 
-  // Save token & user to localStorage
+  // Save auth data to state & storage
   const saveAuthData = (token, userData) => {
+    if (!userData?.role) {
+      console.error("User data missing role. Cannot proceed.");
+      return;
+    }
     localStorage.setItem("accessToken", token);
     localStorage.setItem("user", JSON.stringify(userData));
     axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
@@ -35,18 +50,17 @@ export const AuthProvider = ({ children }) => {
     setUser(userData);
   };
 
-  // Smart redirect after login/signup
-  // Redirect users to correct dashboard based on role
+  // Redirect based on role
   const redirectByRole = (role) => {
     switch (role) {
       case "admin":
-        navigate("/home"); // admin dashboard
+        navigate("/"); // dashboard home
         break;
       case "editor":
-        navigate("/resources"); // editor's main page
+        navigate("/resources");
         break;
       case "viewer":
-        navigate("/logsview"); // viewer's main page
+        navigate("/logs");
         break;
       default:
         navigate("/");
@@ -57,7 +71,8 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const res = await axios.post("/api/auth/login", { email, password });
     saveAuthData(res.data.accessToken, res.data.user);
-    redirectByRole(res.data.user.role); // ✅ smart redirect
+    // Use setTimeout to avoid race conditions with ProtectedRoute
+    setTimeout(() => redirectByRole(res.data.user.role), 0);
   };
 
   // Signup function
@@ -69,7 +84,7 @@ export const AuthProvider = ({ children }) => {
       role
     });
     saveAuthData(res.data.accessToken, res.data.user);
-    redirectByRole(res.data.user.role); // ✅ smart redirect
+    setTimeout(() => redirectByRole(res.data.user.role), 0);
   };
 
   // Logout function
@@ -79,7 +94,7 @@ export const AuthProvider = ({ children }) => {
     delete axios.defaults.headers.common["Authorization"];
     setAccessToken(null);
     setUser(null);
-    navigate("/login"); // ✅ redirect to login after logout
+    navigate("/login");
   };
 
   return (
