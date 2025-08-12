@@ -26,16 +26,16 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Dashboard routes */}
-          <Route element={<DashboardLayout />}>
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute allowedRoles={["viewer", "editor", "admin"]}>
-                  <Home />
-                </ProtectedRoute>
-              }
-            />
+          {/* Protected dashboard layout */}
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={["viewer", "editor", "admin"]}>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<Home />} />
+
             <Route
               path="/resources"
               element={
@@ -44,6 +44,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/analyzer"
               element={
@@ -52,6 +53,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/analytics"
               element={
@@ -60,6 +62,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/logs"
               element={
@@ -68,6 +71,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/users"
               element={
@@ -76,6 +80,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
             <Route
               path="/settings"
               element={
@@ -90,6 +95,5 @@ function App() {
     </Router>
   );
 }
-
 
 export default App;
