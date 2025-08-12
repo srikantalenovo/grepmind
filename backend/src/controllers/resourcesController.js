@@ -1,33 +1,35 @@
-// controllers/resourcesController.js
-import * as resourcesService from '../services/resourcesService.js';
-import logger from '../utils/logger.js';
+// src/controllers/resourcesController.js
+import { getResources } from '../services/resourcesService.js';
 
+/**
+ * Controller: List Kubernetes resources.
+ * Supports: namespace, resourceType, search query params.
+ * Example: GET /api/resources?namespace=default&type=pods&search=my-pod
+ */
 export const listResources = async (req, res) => {
-  const { namespace, type } = req.query;
+  const namespace = req.query.namespace || 'default';
+  const resourceType = req.query.type || 'pods';
+  const search = req.query.search || '';
+
+  console.info(`[INFO] Fetching ${resourceType} in namespace "${namespace}" with search="${search}"`);
 
   try {
-    logger.info(`Fetching ${type} in namespace: ${namespace || 'all'}`);
-    let data;
+    const resources = await getResources(namespace, resourceType, search);
 
-    switch (type) {
-      case 'pods': data = await resourcesService.getPods(namespace); break;
-      case 'deployments': data = await resourcesService.getDeployments(namespace); break;
-      case 'services': data = await resourcesService.getServices(namespace); break;
-      case 'statefulsets': data = await resourcesService.getStatefulSets(namespace); break;
-      case 'daemonsets': data = await resourcesService.getDaemonSets(namespace); break;
-      case 'jobs': data = await resourcesService.getJobs(namespace); break;
-      case 'cronjobs': data = await resourcesService.getCronJobs(namespace); break;
-      case 'configmaps': data = await resourcesService.getConfigMaps(namespace); break;
-      case 'pvcs': data = await resourcesService.getPVCs(namespace); break;
-      case 'ingress': data = await resourcesService.getIngress(namespace); break;
-      case 'helmreleases': data = resourcesService.getHelmReleases(namespace); break;
-      case 'sparkapplications': data = await resourcesService.getSparkApps(namespace); break;
-      default: return res.status(400).json({ message: 'Invalid resource type' });
-    }
+    console.info(`[SUCCESS] Retrieved ${resources.length} ${resourceType} from "${namespace}"`);
 
-    res.json(data.body || data);
+    res.status(200).json({
+      namespace,
+      type: resourceType,
+      count: resources.length,
+      items: resources
+    });
+
   } catch (err) {
-    logger.error(err.message);
-    res.status(500).json({ error: err.message });
+    console.error(`[ERROR] Unable to fetch ${resourceType} in "${namespace}": ${err.message}`);
+    res.status(500).json({
+      message: `Failed to fetch ${resourceType} in ${namespace}`,
+      error: err.message
+    });
   }
 };
