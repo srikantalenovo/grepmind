@@ -1,8 +1,9 @@
 import React, { useContext, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
 import Sidebar from "../components/Sidebar";
+import { Outlet } from "react-router-dom";
 
-export default function DashboardLayout({ children }) {
+export default function DashboardLayout() {
   const { user } = useContext(AuthContext);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -27,7 +28,7 @@ export default function DashboardLayout({ children }) {
           isSidebarOpen ? "ml-64" : "ml-20"
         }`}
       >
-        {children}
+        <Outlet /> {/* ✅ This renders the nested route content */}
       </div>
     </div>
   );

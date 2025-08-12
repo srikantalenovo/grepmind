@@ -36,16 +36,17 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Smart redirect after login/signup
+  // Redirect users to correct dashboard based on role
   const redirectByRole = (role) => {
     switch (role) {
       case "admin":
-        navigate("/admin");
+        navigate("/home"); // admin dashboard
         break;
       case "editor":
-        navigate("/editor");
+        navigate("/resources"); // editor's main page
         break;
       case "viewer":
-        navigate("/viewer");
+        navigate("/logsview"); // viewer's main page
         break;
       default:
         navigate("/");

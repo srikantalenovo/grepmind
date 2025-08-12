@@ -18,49 +18,44 @@ import Unauthorized from "./pages/Unauthorized";
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
+    <Routes>
+      {/* Public routes */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Dashboard routes */}
-          <Route element={<DashboardLayout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/resources" element={<Resources />} />
-
-            <Route
-              path="/analyzer"
-              element={
-                <ProtectedRoute allowedRoles={["editor", "admin"]}>
-                  <Analyzer />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <ProtectedRoute allowedRoles={["editor", "admin"]}>
-                  <Analytics />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/logs" element={<LogsView />} />
-            <Route
-              path="/users"
-              element={
-                <ProtectedRoute allowedRoles={["admin"]}>
-                  <Users />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-        </Routes>
-      </AuthProvider>
-    </Router>
+      {/* Dashboard routes */}
+      <Route element={<DashboardLayout />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/resources" element={<Resources />} />
+        <Route
+          path="/analyzer"
+          element={
+            <ProtectedRoute allowedRoles={["editor", "admin"]}>
+              <Analyzer />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <ProtectedRoute allowedRoles={["editor", "admin"]}>
+              <Analytics />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/logs" element={<LogsView />} />
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <Users />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+    </Routes>
   );
 }
 
