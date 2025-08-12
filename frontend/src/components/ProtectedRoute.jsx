@@ -1,23 +1,29 @@
-import React, { useContext } from "react";
-import { Navigate } from "react-router-dom";
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 
-export default function ProtectedRoute({ children }) {
+const ProtectedRoute = ({ allowedRoles, children }) => {
   const { user, initializing } = useContext(AuthContext);
+  const location = useLocation();
 
-  // Show nothing (or a loader) until context finishes initializing
+  // Wait until AuthContext finishes loading from localStorage
   if (initializing) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p>Loading...</p>
-      </div>
-    );
+    return <div>Loading...</div>; // You can replace with a spinner
   }
 
-  // Redirect to login if not authenticated
+  // Not logged in → redirect to login
   if (!user) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Role not allowed → redirect to unauthorized page
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  // Allowed → render child component
   return children;
-}
+};
+
+export default ProtectedRoute;
