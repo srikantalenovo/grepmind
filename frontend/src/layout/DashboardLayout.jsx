@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { AuthContext } from "../../context/AuthContext";
+import { AuthContext } from "../context/AuthContext";
 import Sidebar from "../components/Sidebar";
 
 export default function DashboardLayout({ children }) {
