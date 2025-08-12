@@ -1,21 +1,9 @@
-import React, { useContext, useState } from "react";
-import { AuthContext } from "../context/AuthContext";
+import React, { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import { Outlet } from "react-router-dom";
 
 export default function DashboardLayout() {
-  const { user } = useContext(AuthContext);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-green-200 via-yellow-100 to-orange-200">
-        <h1 className="text-2xl font-bold text-gray-700">
-          Please login to access the dashboard.
-        </h1>
-      </div>
-    );
-  }
 
   return (
     <div className="flex bg-gradient-to-br from-green-50 via-white to-orange-50 min-h-screen">
@@ -28,7 +16,7 @@ export default function DashboardLayout() {
           isSidebarOpen ? "ml-64" : "ml-20"
         }`}
       >
-        <Outlet /> {/* ✅ This renders the nested route content */}
+        <Outlet /> {/* ✅ Renders the nested route content */}
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Protected dashboard layout */}
+          {/* Protected dashboard routes */}
           <Route
             element={
               <ProtectedRoute allowedRoles={["viewer", "editor", "admin"]}>
@@ -35,7 +35,6 @@ function App() {
             }
           >
             <Route path="/" element={<Home />} />
-
             <Route
               path="/resources"
               element={
@@ -44,7 +43,6 @@ function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="/analyzer"
               element={
@@ -53,7 +51,6 @@ function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="/analytics"
               element={
@@ -62,16 +59,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
-
-            <Route
-              path="/logs"
-              element={
-                <ProtectedRoute allowedRoles={["viewer", "editor", "admin"]}>
-                  <LogsView />
-                </ProtectedRoute>
-              }
-            />
-
+            <Route path="/logs" element={<LogsView />} />
             <Route
               path="/users"
               element={
@@ -80,7 +68,6 @@ function App() {
                 </ProtectedRoute>
               }
             />
-
             <Route
               path="/settings"
               element={
