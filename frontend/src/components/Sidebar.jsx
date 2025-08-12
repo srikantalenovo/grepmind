@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import {
   FaHome,
   FaBook,
@@ -10,24 +10,38 @@ import {
   FaSignOutAlt,
   FaBars,
 } from "react-icons/fa";
-import { useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 
 export default function Sidebar({ isOpen, setIsOpen }) {
-  const { logout } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
 
-  const menuItems = [
-    { name: "Home", icon: <FaHome />, path: "#" },
-    { name: "Resources", icon: <FaBook />, path: "#" },
-    { name: "Analyzer", icon: <FaBrain />, path: "#" },
-    { name: "Analytics", icon: <FaChartBar />, path: "#" },
-    { name: "LogsView", icon: <FaFileAlt />, path: "#" },
-  ];
+  // Define menus by role
+  const roleMenus = {
+    admin: [
+      { name: "Home", icon: <FaHome />, path: "#" },
+      { name: "Resources", icon: <FaBook />, path: "#" },
+      { name: "Analyzer", icon: <FaBrain />, path: "#" },
+      { name: "Analytics", icon: <FaChartBar />, path: "#" },
+      { name: "LogsView", icon: <FaFileAlt />, path: "#" },
+      { name: "Users", icon: <FaUsers />, path: "#" },
+      { name: "Settings", icon: <FaCog />, path: "#" },
+    ],
+    editor: [
+      { name: "Home", icon: <FaHome />, path: "#" },
+      { name: "Resources", icon: <FaBook />, path: "#" },
+      { name: "Analyzer", icon: <FaBrain />, path: "#" },
+      { name: "Analytics", icon: <FaChartBar />, path: "#" },
+      { name: "LogsView", icon: <FaFileAlt />, path: "#" },
+    ],
+    viewer: [
+      { name: "Home", icon: <FaHome />, path: "#" },
+      { name: "Resources", icon: <FaBook />, path: "#" },
+      { name: "LogsView", icon: <FaFileAlt />, path: "#" },
+    ],
+  };
 
-  const bottomMenu = [
-    { name: "Settings", icon: <FaCog />, path: "#" },
-    { name: "Users", icon: <FaUsers />, path: "#" },
-  ];
+  // Get menus based on role, fallback to empty array
+  const menuItems = roleMenus[user?.role] || [];
 
   return (
     <div className="fixed top-0 left-0 h-screen z-50 flex">
@@ -73,25 +87,6 @@ export default function Sidebar({ isOpen, setIsOpen }) {
               </a>
             ))}
           </nav>
-        </div>
-
-        {/* Bottom Menu */}
-        <div className="space-y-4">
-          {bottomMenu.map((item, idx) => (
-            <a
-              key={idx}
-              href={item.path}
-              className="flex items-center space-x-3 p-2 rounded-lg hover:bg-white/30 transition-colors"
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span
-                className={`text-sm font-medium transition-all duration-500
-                  ${isOpen ? "opacity-100" : "opacity-0 overflow-hidden w-0"}`}
-              >
-                {item.name}
-              </span>
-            </a>
-          ))}
         </div>
       </div>
 
