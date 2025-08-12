@@ -1,7 +1,7 @@
 import React, { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { FaEnvelope, FaLock } from "react-icons/fa";
-import backgroundImg from "../assets/login-bg.png"; // Add your image in src/assets
+import backgroundImg from "../assets/login-bg.jpg"; // Add your image in src/assets
 
 export default function Login() {
   const { login } = useContext(AuthContext);
