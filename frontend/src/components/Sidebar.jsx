@@ -10,6 +10,7 @@ import {
   FaCog,
   FaSignOutAlt,
   FaBars,
+  FaTimes,
 } from "react-icons/fa";
 import { Link, useLocation } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
@@ -65,14 +66,20 @@ export default function Sidebar({ isOpen, setIsOpen }) {
               </h1>
             </div>
             <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="p-2 rounded-lg hover:bg-white/30 transition-transform duration-300"
-            >
-              <FaBars
-                className={`transition-transform duration-300 ${
-                  isOpen ? "rotate-90" : "rotate-0"
-                }`}
-              />
+                onClick={() => setIsOpen(!isOpen)}
+                className="p-2 rounded-lg hover:bg-white/30 transition-transform duration-300 ease-in-out"
+                >
+                {isOpen ? (
+                    <FaTimes
+                    className="transform transition-transform duration-300 rotate-180"
+                    size={20}
+                    />
+                ) : (
+                    <FaBars
+                    className="transform transition-transform duration-300 rotate-0"
+                    size={20}
+                    />
+                )}
             </button>
           </div>
 
