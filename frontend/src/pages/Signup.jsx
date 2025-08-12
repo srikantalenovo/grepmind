@@ -1,7 +1,7 @@
 import React, { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { FaUser, FaEnvelope, FaLock } from "react-icons/fa";
-import backgroundImg from "../assets/signup-bg.jpg"; // Add your image in src/assets
+import backgroundImg from "../assets/signup-bg.png"; // Add your image in src/assets
 
 export default function Signup() {
   const { signup } = useContext(AuthContext);
