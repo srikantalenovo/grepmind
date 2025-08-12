@@ -2,49 +2,63 @@
 import { coreV1Api } from '../config/k8sClient.js';
 
 /**
- * Get all namespaces in the cluster
+ * List all namespaces in the cluster
  */
-export const getNamespaces = async () => {
+export const listNamespaces = async () => {
   try {
     const res = await coreV1Api.listNamespace();
     return res.body.items.map(ns => ({
       name: ns.metadata?.name || 'Unnamed',
       status: ns.status?.phase || 'Unknown',
-      age: getAge(ns.metadata?.creationTimestamp)
+      age: getAge(ns.metadata?.creationTimestamp),
     }));
   } catch (err) {
-    console.error(`[ERROR] Failed to fetch namespaces:`, err.message);
+    console.error(`[ERROR] Failed to list namespaces: ${err.message}`);
     throw err;
   }
 };
 
 /**
- * Get all nodes in the cluster
+ * List all nodes in the cluster
  */
-export const getNodes = async () => {
+export const listNodes = async () => {
   try {
     const res = await coreV1Api.listNode();
     return res.body.items.map(node => ({
       name: node.metadata?.name || 'Unnamed',
       status: getNodeStatus(node),
-      age: getAge(node.metadata?.creationTimestamp)
+      age: getAge(node.metadata?.creationTimestamp),
+      roles: getNodeRoles(node),
+      version: node.status?.nodeInfo?.kubeletVersion || 'Unknown',
     }));
   } catch (err) {
-    console.error(`[ERROR] Failed to fetch nodes:`, err.message);
+    console.error(`[ERROR] Failed to list nodes: ${err.message}`);
     throw err;
   }
 };
 
 /**
- * Determine node readiness status
+ * Determine node roles
+ */
+function getNodeRoles(node) {
+  const labels = node.metadata?.labels || {};
+  return Object.keys(labels)
+    .filter(label => label.startsWith('node-role.kubernetes.io/'))
+    .map(label => label.replace('node-role.kubernetes.io/', ''))
+    .join(', ') || 'worker';
+}
+
+/**
+ * Determine node status
  */
 function getNodeStatus(node) {
-  const readyCondition = node.status?.conditions?.find(c => c.type === 'Ready');
+  const conditions = node.status?.conditions || [];
+  const readyCondition = conditions.find(c => c.type === 'Ready');
   return readyCondition?.status === 'True' ? 'Ready' : 'NotReady';
 }
 
 /**
- * Convert creationTimestamp to "age" string.
+ * Calculate age from creation timestamp
  */
 function getAge(creationTimestamp) {
   if (!creationTimestamp) return 'Unknown';
