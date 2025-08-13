@@ -10,9 +10,9 @@ const app = express();
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://grepmind.sritechhub.com',
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role'], // allow RBAC header
-  exposedHeaders: ['x-request-id'],
+  credentials: true
+//  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role'], // allow RBAC header
+//  exposedHeaders: ['x-request-id'],
 }));
 
 app.use(express.json());
