@@ -1,5 +1,6 @@
 // src/pages/Resources.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ResourceDetailsDrawer from '../components/ResourceDetailsDrawer.jsx'; // <-- [ADDED] details drawer
 
 // --- Config ---
 const API_BASE = import.meta.env.VITE_API_BASE || ''; // e.g. http://localhost:5000
@@ -81,6 +82,10 @@ export default function Resources() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const searchTimer = useRef(null);
 
+  // --- [ADDED] selection state for details drawer ---
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedResource, setSelectedResource] = useState(null); // { name, namespace, status, age, type }
+
   // Load namespaces
   useEffect(() => {
     (async () => {
@@ -142,21 +147,35 @@ export default function Resources() {
   useEffect(() => {
     loadResources();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [namespace, type, search]);
-    
-      // Auto-refresh every 30 minutes
-      useEffect(() => {
-        const intervalId = setInterval(() => {
-          loadResources();
-        }, 30 * 60 * 1000); // 30 minutes in ms
-    
-        return () => clearInterval(intervalId);
+  }, [namespace, type, search]);
+
+  // Auto-refresh every 30 minutes
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadResources();
+    }, 30 * 60 * 1000); // 30 minutes in ms
+
+    return () => clearInterval(intervalId);
   }, [namespace, type, search]);
 
   const subtitle = useMemo(() => {
     const typeLabel = RESOURCE_TYPES.find(t => t.key === type)?.label || type;
     return `${typeLabel} · ${namespace === 'all' ? 'All Namespaces' : namespace}`;
   }, [type, namespace]);
+
+  // --- [ADDED] row click handler (keeps your table intact) ---
+  const onRowClick = (row) => {
+    // If listing across all namespaces, API still needs the specific ns from the row.
+    const ns = row.namespace || namespace || 'default';
+    setSelectedResource({
+      name: row.name,
+      namespace: ns,
+      status: row.status,
+      age: row.age,
+      type, // current selected resource type
+    });
+    setDrawerOpen(true);
+  };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">
@@ -168,13 +187,12 @@ export default function Resources() {
             <p className="text-sm text-gray-500">
               Last updated: {lastUpdated.toLocaleString()}
             </p>
-          )}        
-          </div>
+          )}
+        </div>
 
         {/* Filters Card */}
         <div className="rounded-2xl border border-gray-200 bg-white/80 backdrop-blur-md shadow-sm p-3 w-full md:w-auto">
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            {/* Resource type segmented buttons */}
             {/* Resource type dropdown */}
             <select
               className="px-3 py-2 rounded-lg bg-white text-gray-800 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300"
@@ -255,7 +273,8 @@ export default function Resources() {
                         idx % 2 === 0
                           ? 'bg-white hover:bg-indigo-50'
                           : 'bg-indigo-50/50 hover:bg-indigo-100/70'
-                      }`}
+                      } ${!loadingData ? 'cursor-pointer' : ''}`} // <-- [ADDED] pointer on hover
+                      onClick={() => onRowClick(row)}                // <-- [ADDED] open drawer
                     >
                       <td className="px-4 py-3 border-b border-gray-200 text-gray-900 font-medium whitespace-nowrap">
                         <div className="truncate" title={row.name}>{row.name}</div>
@@ -339,6 +358,13 @@ export default function Resources() {
           {errMsg}
         </div>
       )}
+
+      {/* [ADDED] Details Drawer (keeps your palette/rounded look) */}
+      <ResourceDetailsDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        resource={selectedResource} // { name, namespace, status, age, type }
+      />
     </div>
   );
 }
