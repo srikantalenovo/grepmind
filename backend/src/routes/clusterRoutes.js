@@ -1,7 +1,7 @@
-// routes/clusterRoutes.js
+// src/routes/clusterRoutes.js
 import express from 'express';
 import { getNamespaces, getNodes } from '../controllers/clusterController.js';
-import { rbac } from '../middleware/rbacMiddleware.js';
+import { rbac } from '../middleware/rbacMiddleware.js'; // <-- middlewares (plural)
 
 const router = express.Router();
 

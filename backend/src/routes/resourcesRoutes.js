@@ -1,10 +1,11 @@
-// routes/resourcesRoutes.js
+// src/routes/resourcesRoutes.js
 import express from 'express';
 import { listResources } from '../controllers/resourcesController.js';
+import { rbac } from '../middleware/rbacMiddleware.js';
 
 const router = express.Router();
 
-// No RBAC middleware — open access for now
-router.get('/', listResources);
+// Read-only listing for viewer/editor/admin
+router.get('/', rbac(['viewer', 'editor', 'admin']), listResources);
 
 export default router;
