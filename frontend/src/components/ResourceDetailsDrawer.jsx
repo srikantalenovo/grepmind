@@ -85,7 +85,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
           // We’ll try default container logs; backend allows "/logs" with container name if needed.
           // If the backend requires container name, you can extend this to pass ?container=...
           const podName = name;
-          const logText = await apiText(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(podName)}/default/logs`);
+          const logText = await apiText(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/logs`);
           setLogs(logText);
         }
       } catch (e) {
