@@ -151,34 +151,27 @@ export const getResourceEvents = async (req, res) => {
  * GET /api/resources/:namespace/:podName/:container/logs
  */
 export const getPodLogs = async (req, res) => {
-  const { namespace, podName, container } = req.params;
+  let { namespace, podName, container } = req.params;
 
   try {
-    // Read pod info to check state
-    const podInfo = (await coreV1Api.readNamespacedPod(podName, namespace)).body;
-
-    if (!podInfo.status || podInfo.status.phase !== 'Running') {
-      return res.status(200).send(`Pod is in ${podInfo.status?.phase || 'Unknown'} state. No logs available.`);
+    // If 'container' looks like a namespace, swap variables
+    // (namespace names can't contain uppercase letters; pod names often have hyphens & numbers)
+    if (container && (container === 'default' || /^[a-z0-9-]+$/.test(container) && !/^[a-z0-9-]+$/.test(namespace))) {
+      // This means frontend sent /namespace/podName/namespace/logs by mistake
+      namespace = container;
+      container = undefined;
     }
-
-    // Fallback to first container if not provided
-    const containerName = container || podInfo.spec.containers[0].name;
 
     const logs = (await coreV1Api.readNamespacedPodLog(
       podName,
       namespace,
-      containerName,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true // pretty
+      container
     )).body;
 
     res.setHeader('Content-Type', 'text/plain');
     res.send(logs);
   } catch (err) {
-    console.error(`[ERROR] Failed to get logs for ${podName}/${container}:`, err.message);
+    console.error(`[ERROR] Failed to get logs for ${podName}/${container || 'no-container'} in namespace ${namespace}:`, err.message);
     res.status(500).json({ error: `Failed to fetch pod logs: ${err.message}` });
   }
 };
