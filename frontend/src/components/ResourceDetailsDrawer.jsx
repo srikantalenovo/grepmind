@@ -81,12 +81,26 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
           ev.sort((a, b) => new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0));
           setEvents(ev);
         } else if (activeTab === 'logs' && canShowLogs) {
-          // For pods: podName is the resource name.
-          // We’ll try default container logs; backend allows "/logs" with container name if needed.
-          // If the backend requires container name, you can extend this to pass ?container=...
-          const podName = name;
-          const logText = await apiText(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/logs`);
-          setLogs(logText);
+        const podName = name;
+
+        // First fetch pod details to get a valid container name
+        const podDetails = await apiJson(
+            `/api/resources/${encodeURIComponent(ns)}/pods/${encodeURIComponent(podName)}/details`
+        );
+
+        const containerName = podDetails?.spec?.containers?.[0]?.name;
+
+        if (!containerName) {
+            console.error(`No container found for pod: ${podName}`);
+            setLogs("No containers found in this pod.");
+            return;
+        }
+
+        // Now fetch logs for that container
+        const logText = await apiText(
+            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/logs`
+        );
+        setLogs(logText);
         }
       } catch (e) {
         console.error('Drawer load error:', e);
