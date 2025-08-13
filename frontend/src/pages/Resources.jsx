@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import GlassCard from '../components/GlassCard'; // Glass container component
 
 export default function Resources() {
   const [namespaces, setNamespaces] = useState([]);
