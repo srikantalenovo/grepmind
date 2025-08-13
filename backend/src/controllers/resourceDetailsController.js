@@ -8,7 +8,6 @@ import yaml from 'js-yaml';
 
 /**
  * GET /api/resources/:namespace/:resourceType/:name/details
- * Fetch metadata & status for a resource.
  */
 export const getResourceDetails = async (req, res) => {
   const { namespace, resourceType, name } = req.params;
@@ -30,6 +29,21 @@ export const getResourceDetails = async (req, res) => {
         break;
       case 'daemonsets':
         resource = (await appsV1Api.readNamespacedDaemonSet(name, namespace)).body;
+        break;
+      case 'persistentvolumeclaims':
+        resource = (await coreV1Api.readNamespacedPersistentVolumeClaim(name, namespace)).body;
+        break;
+      case 'configmaps':
+        resource = (await coreV1Api.readNamespacedConfigMap(name, namespace)).body;
+        break;
+      case 'helmreleases':
+        resource = (await customObjectsApi.getNamespacedCustomObject(
+          'helm.toolkit.fluxcd.io',
+          'v2beta1',
+          namespace,
+          'helmreleases',
+          name
+        )).body;
         break;
       case 'ingresses':
         resource = (await customObjectsApi.getNamespacedCustomObject(
@@ -54,7 +68,6 @@ export const getResourceDetails = async (req, res) => {
 
 /**
  * GET /api/resources/:namespace/:resourceType/:name/yaml
- * Fetch YAML manifest for a resource.
  */
 export const getResourceYaml = async (req, res) => {
   const { namespace, resourceType, name } = req.params;
@@ -77,6 +90,21 @@ export const getResourceYaml = async (req, res) => {
       case 'daemonsets':
         resource = (await appsV1Api.readNamespacedDaemonSet(name, namespace)).body;
         break;
+      case 'persistentvolumeclaims':
+        resource = (await coreV1Api.readNamespacedPersistentVolumeClaim(name, namespace)).body;
+        break;
+      case 'configmaps':
+        resource = (await coreV1Api.readNamespacedConfigMap(name, namespace)).body;
+        break;
+      case 'helmreleases':
+        resource = (await customObjectsApi.getNamespacedCustomObject(
+          'helm.toolkit.fluxcd.io',
+          'v2beta1',
+          namespace,
+          'helmreleases',
+          name
+        )).body;
+        break;
       case 'ingresses':
         resource = (await customObjectsApi.getNamespacedCustomObject(
           'networking.k8s.io', 'v1', namespace, 'ingresses', name
@@ -97,7 +125,6 @@ export const getResourceYaml = async (req, res) => {
 
 /**
  * GET /api/resources/:namespace/:name/events
- * Fetch events related to a resource.
  */
 export const getResourceEvents = async (req, res) => {
   const { namespace, name } = req.params;
@@ -122,16 +149,30 @@ export const getResourceEvents = async (req, res) => {
 
 /**
  * GET /api/resources/:namespace/:podName/:container/logs
- * Fetch logs for a container in a pod.
  */
 export const getPodLogs = async (req, res) => {
   const { namespace, podName, container } = req.params;
 
   try {
+    // Read pod info to check state
+    const podInfo = (await coreV1Api.readNamespacedPod(podName, namespace)).body;
+
+    if (!podInfo.status || podInfo.status.phase !== 'Running') {
+      return res.status(200).send(`Pod is in ${podInfo.status?.phase || 'Unknown'} state. No logs available.`);
+    }
+
+    // Fallback to first container if not provided
+    const containerName = container || podInfo.spec.containers[0].name;
+
     const logs = (await coreV1Api.readNamespacedPodLog(
       podName,
       namespace,
-      container
+      containerName,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true // pretty
     )).body;
 
     res.setHeader('Content-Type', 'text/plain');
