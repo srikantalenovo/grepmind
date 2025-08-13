@@ -62,4 +62,10 @@ router.get(
   getPodLogs
 );
 
+// Get logs for a specific pod/
+router.get(
+  '/:namespace/:podName/logs',
+  rbac(['viewer', 'editor', 'admin']),
+  getPodLogs
+);
 export default router;
