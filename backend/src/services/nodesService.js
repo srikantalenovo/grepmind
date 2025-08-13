@@ -1,21 +1,12 @@
-// src/controllers/clusterController.js
+// src/services/nodesService.js
 import { coreV1Api } from '../config/k8sClient.js';
 
-export const getNamespaces = async (req, res) => {
+export const getNodes = async () => {
   try {
-    const result = await coreV1Api.listNamespace();
-    const namespaces = result.body.items.map(ns => ns.metadata?.name);
-    res.json(namespaces);
-  } catch (err) {
-    console.error('[ERROR] Failed to fetch namespaces:', err.message);
-    res.status(500).json({ error: 'Failed to fetch namespaces' });
-  }
-};
+    const res = await coreV1Api.listNode();
+    const items = res.body.items || [];
 
-export const getNodes = async (req, res) => {
-  try {
-    const result = await coreV1Api.listNode();
-    const nodes = result.body.items.map(node => {
+    return items.map(node => {
       const name = node.metadata?.name || 'Unnamed';
       const creationTimestamp = node.metadata?.creationTimestamp;
       const addresses = node.status?.addresses || [];
@@ -46,11 +37,9 @@ export const getNodes = async (req, res) => {
         age: getAge(creationTimestamp)
       };
     });
-
-    res.json(nodes);
   } catch (err) {
-    console.error('[ERROR] Failed to fetch nodes:', err.message);
-    res.status(500).json({ error: 'Failed to fetch nodes' });
+    console.error(`[ERROR] Failed to fetch node details: ${err.message}`);
+    throw err;
   }
 };
 

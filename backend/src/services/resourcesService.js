@@ -8,36 +8,83 @@ import {
 } from '../config/k8sClient.js';
 
 const resourceHandlers = {
-  pods: (ns) => coreV1Api.listNamespacedPod(ns),
-  services: (ns) => coreV1Api.listNamespacedService(ns),
-  configmaps: (ns) => coreV1Api.listNamespacedConfigMap(ns),
-  persistentvolumeclaims: (ns) => coreV1Api.listNamespacedPersistentVolumeClaim(ns),
-
-  deployments: (ns) => appsV1Api.listNamespacedDeployment(ns),
-  statefulsets: (ns) => appsV1Api.listNamespacedStatefulSet(ns),
-  daemonsets: (ns) => appsV1Api.listNamespacedDaemonSet(ns),
-
-  jobs: (ns) => batchV1Api.listNamespacedJob(ns),
-  cronjobs: (ns) => batchV1Api.listNamespacedCronJob(ns),
-
-  ingress: (ns) => networkingV1Api.listNamespacedIngress(ns),
-
-  sparkapplications: (ns) =>
-    customObjectsApi.listNamespacedCustomObject(
-      'sparkoperator.k8s.io',
-      'v1beta2',
-      ns,
-      'sparkapplications'
-    ),
+  pods: {
+    ns: (ns) => coreV1Api.listNamespacedPod(ns),
+    all: () => coreV1Api.listPodForAllNamespaces()
+  },
+  services: {
+    ns: (ns) => coreV1Api.listNamespacedService(ns),
+    all: () => coreV1Api.listServiceForAllNamespaces()
+  },
+  configmaps: {
+    ns: (ns) => coreV1Api.listNamespacedConfigMap(ns),
+    all: () => coreV1Api.listConfigMapForAllNamespaces()
+  },
+  persistentvolumeclaims: {
+    ns: (ns) => coreV1Api.listNamespacedPersistentVolumeClaim(ns),
+    all: () => coreV1Api.listPersistentVolumeClaimForAllNamespaces()
+  },
+  deployments: {
+    ns: (ns) => appsV1Api.listNamespacedDeployment(ns),
+    all: () => appsV1Api.listDeploymentForAllNamespaces()
+  },
+  statefulsets: {
+    ns: (ns) => appsV1Api.listNamespacedStatefulSet(ns),
+    all: () => appsV1Api.listStatefulSetForAllNamespaces()
+  },
+  daemonsets: {
+    ns: (ns) => appsV1Api.listNamespacedDaemonSet(ns),
+    all: () => appsV1Api.listDaemonSetForAllNamespaces()
+  },
+  jobs: {
+    ns: (ns) => batchV1Api.listNamespacedJob(ns),
+    all: () => batchV1Api.listJobForAllNamespaces()
+  },
+  cronjobs: {
+    ns: (ns) => batchV1Api.listNamespacedCronJob(ns),
+    all: () => batchV1Api.listCronJobForAllNamespaces()
+  },
+  ingress: {
+    ns: (ns) => networkingV1Api.listNamespacedIngress(ns),
+    all: () => networkingV1Api.listIngressForAllNamespaces()
+  },
+  sparkapplications: {
+    ns: (ns) =>
+      customObjectsApi.listNamespacedCustomObject(
+        'sparkoperator.k8s.io',
+        'v1beta2',
+        ns,
+        'sparkapplications'
+      ),
+    all: async () => {
+      const namespaces = (await coreV1Api.listNamespace()).body.items.map(ns => ns.metadata.name);
+      let allItems = [];
+      for (const ns of namespaces) {
+        const res = await customObjectsApi.listNamespacedCustomObject(
+          'sparkoperator.k8s.io',
+          'v1beta2',
+          ns,
+          'sparkapplications'
+        );
+        allItems = allItems.concat(res.body.items || []);
+      }
+      return { body: { items: allItems } };
+    }
+  }
 };
 
 export const getResources = async (namespace, resourceType, search) => {
   try {
-    if (!resourceHandlers[resourceType]) {
+    const handler = resourceHandlers[resourceType];
+    if (!handler) {
       throw new Error(`Unsupported resource type: ${resourceType}`);
     }
 
-    const res = await resourceHandlers[resourceType](namespace);
+    const isAll = namespace?.toLowerCase() === 'all';
+    const res = isAll
+      ? await handler.all()
+      : await handler.ns(namespace);
+
     let items = res.body.items || [];
 
     if (search) {
@@ -48,7 +95,7 @@ export const getResources = async (namespace, resourceType, search) => {
 
     return items.map(item => ({
       name: item.metadata?.name || 'Unnamed',
-      namespace: item.metadata?.namespace || namespace,
+      namespace: item.metadata?.namespace || (isAll ? 'unknown' : namespace),
       status: getResourceStatus(resourceType, item),
       age: getAge(item.metadata?.creationTimestamp),
     }));
@@ -60,7 +107,8 @@ export const getResources = async (namespace, resourceType, search) => {
 
 function getResourceStatus(resourceType, item) {
   switch (resourceType) {
-    case 'pods': return item.status?.phase || 'Unknown';
+    case 'pods':
+      return item.status?.phase || 'Unknown';
     case 'deployments':
     case 'statefulsets':
     case 'daemonsets':
