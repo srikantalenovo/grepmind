@@ -178,16 +178,16 @@ export default function Resources() {
   };
 //noderow click added
 
-const onSelectResource = (resource) => {
-  const clusterScoped = ['nodes', 'namespaces', 'persistentvolumes']; // add cluster-level types
-  const ns = clusterScoped.includes(resource.type) ? '' : resource.namespace || 'default';
+  const onSelectResource = (resource) => {
+    const clusterScoped = ['nodes', 'namespaces', 'persistentvolumes'];
+    const ns = clusterScoped.includes(resource.type) ? '' : resource.namespace || 'default';
 
-  setSelectedResource({
-    ...resource,
-    namespace: ns
-  });
-  setDrawerOpen(true);
-}; 
+    setSelectedResource({
+      ...resource,
+      namespace: ns
+    });
+    setDrawerOpen(true);
+  };
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">
@@ -343,7 +343,7 @@ const onSelectResource = (resource) => {
                   key={n.name}
                   className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 cursor-pointer hover:bg-indigo-50 transition"
                   //onClick={() => onSelectResource("nodes", n.name, null)} // null for cluster-scoped
-                  onClick={() => onSelectResource(n)}
+                  onClick={() => onSelectResource({ ...n, type: 'nodes' })}
                 >
                   <div className="flex items-center justify-between">
                     <div className="font-medium text-gray-900 truncate" title={n.name}>{n.name}</div>
