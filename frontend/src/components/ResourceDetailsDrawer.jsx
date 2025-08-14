@@ -67,7 +67,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
 
   // Fetch details depending on tab & resource type
   useEffect(() => {
-    if (!open || !resource?.name || !resource?.namespace) return;
+    if (!open || !resource?.name) return;
 
     const t = normalizeType(resource.type);
     const ns = resource.namespace;
@@ -78,12 +78,22 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
       setLoading(true);
       try {
         if (activeTab === "overview") {
-          const d = await apiJson(
-            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
-              t
-            )}/${encodeURIComponent(name)}/details`
-          );
+          let d;
+          if (isNode) {
+            // Node overview
+            d = await apiJson(
+              `/api/cluster/nodes/${encodeURIComponent(name)}/details`
+            );
+          } else {
+            // Default resource overview
+            d = await apiJson(
+              `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+                t
+              )}/${encodeURIComponent(name)}/details`
+            );
+          }
           setDetails(d);
+
         } else if (activeTab === "yaml" && !isNode) {
           const text = await fetch(
             `${API_BASE}/api/resources/${encodeURIComponent(
@@ -94,30 +104,38 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
             if (!r.ok) {
               const msg = await r.text().catch(() => "");
               throw new Error(
-                `HTTP ${r.status} ${r.statusText}${
-                  msg ? ` - ${msg}` : ""
-                }`
+                `HTTP ${r.status} ${r.statusText}${msg ? ` - ${msg}` : ""}`
               );
             }
             return r.text();
           });
           setYamlStr(text);
-        } else if (activeTab === "events") {
-          const ev = await apiJson(
-            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
-              name
-            )}/events`
-          );
-          ev.sort(
-            (a, b) =>
-              new Date(b.lastTimestamp || 0) -
-              new Date(a.lastTimestamp || 0)
-          );
-          setEvents(ev);
+
+          } else if (activeTab === "events") {
+            let ev;
+            if (isNode) {
+              ev = await apiJson(
+                `/api/cluster/nodes/${encodeURIComponent(name)}/events`
+              );
+            } else {
+              ev = await apiJson(
+                `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+                  name
+                )}/events`
+              );
+            }
+
+            ev.sort(
+              (a, b) =>
+                new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0)
+            );
+            setEvents(ev);
+
         } else if (activeTab === "logs" && canShowLogs) {
           if (isNode) {
+            // Node logs
             const logText = await apiText(
-              `/api/nodes/${encodeURIComponent(name)}/logs/kubelet.log`
+              `/api/cluster/nodes/${encodeURIComponent(name)}/logs`
             );
             setLogs(logText);
           } else {
@@ -128,8 +146,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
               )}/details`
             );
 
-            const containerName =
-              podDetails?.spec?.containers?.[0]?.name;
+            const containerName = podDetails?.spec?.containers?.[0]?.name;
             if (!containerName) {
               setLogs("No containers found in this pod.");
               return;
@@ -154,17 +171,6 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
     load();
   }, [open, resource, activeTab, canShowLogs, isNode]);
 
-  // Reset when closed or resource changes
-  useEffect(() => {
-    if (!open) {
-      setActiveTab("overview");
-      setDetails(null);
-      setYamlStr("");
-      setEvents([]);
-      setLogs("");
-      setError("");
-    }
-  }, [open, resource?.name, resource?.namespace, resource?.type]);
 
   const title = useMemo(() => {
     if (!resource) return "Details";

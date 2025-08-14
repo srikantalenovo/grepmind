@@ -43,37 +43,29 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
   const [logs, setLogs] = useState('');
   const [error, setError] = useState('');
 
-  // ✅ Detect if this is a node
-  const isNode = useMemo(() => {
-    const type = String(resource?.type || '').toLowerCase();
-    return type === 'node' || type === 'nodes';
-  }, [resource]);
+  const isNode = useMemo(
+    () => String(resource?.type || "").toLowerCase() === "nodes",
+    [resource]
+  );
+  // const isNode = useMemo(() => {
+  //   const t = String(resource?.type || "").toLowerCase();
+  //   if (t === "nodes") return true;
+  //   // Fallback detection — nodes often have `resource.kind` or `resource.nodeInfo`
+  //   return resource?.kind === "Node" || !!resource?.nodeInfo;
+  // }, [resource]);
 
-  // ✅ Only show logs for nodes & pods
   const canShowLogs = useMemo(() => {
-    const t = String(resource?.type || '').toLowerCase();
-    return ['pods', 'sparkapplications', 'node', 'nodes'].includes(t);
-  }, [resource]);
+    if (isNode) return true;
+    const t = String(resource?.type || "").toLowerCase();
+    return ["pods", "sparkapplications"].includes(t);
+  }, [resource, isNode]);
 
-  // ✅ Build tab list dynamically
-  // const availableTabs = useMemo(() => {
-  //   if (isNode) {
-  //     return ['overview', 'logs']; // only Overview + Logs for nodes
-  //   }
-  //   return ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
-  // }, [isNode, canShowLogs]);
-
-  // tabs list
   const availableTabs = useMemo(() => {
-    console.log('Detected type:', resource?.type, 'isNode:', isNode, 'canShowLogs:', canShowLogs);
-    if (isNode) {
-      return ['overview', 'logs'];
-    }
-    return ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
-  }, [isNode, canShowLogs, resource?.type]);
+    if (isNode) return ["overview", "logs"];
+    return ["overview", "yaml", "events", ...(canShowLogs ? ["logs"] : [])];
+  }, [isNode, canShowLogs]);
 
-
-  // fetch detail data per tab
+  // Fetch details depending on tab & resource type
   useEffect(() => {
     if (!open || !resource?.name || !resource?.namespace) return;
 
@@ -82,71 +74,78 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
     const name = resource.name;
 
     const load = async () => {
-      setError('');
+      setError("");
       setLoading(true);
       try {
-        if (activeTab === 'overview') {
-          if (isNode) {
-            // ✅ Direct node details call
-            const d = await apiJson(`/api/nodes/${encodeURIComponent(name)}/details`);
+        if (activeTab === "overview") {
+          const d = await apiJson(
+            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+              t
+            )}/${encodeURIComponent(name)}/details`
+          );
           setDetails(d);
-          } else {
-            const d = await apiJson(
-              `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(t)}/${encodeURIComponent(name)}/details`
-            );
-            setDetails(d);
-          }
-        } else if (activeTab === 'yaml' && !isNode) {
+        } else if (activeTab === "yaml" && !isNode) {
           const text = await fetch(
-            `${API_BASE}/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(t)}/${encodeURIComponent(name)}/yaml`,
-            { headers: { 'x-user-role': 'viewer' } }
+            `${API_BASE}/api/resources/${encodeURIComponent(
+              ns
+            )}/${encodeURIComponent(t)}/${encodeURIComponent(name)}/yaml`,
+            { headers: { "x-user-role": "viewer" } }
           ).then(async (r) => {
             if (!r.ok) {
-              const msg = await r.text().catch(() => '');
-              throw new Error(`HTTP ${r.status} ${r.statusText}${msg ? ` - ${msg}` : ''}`);
+              const msg = await r.text().catch(() => "");
+              throw new Error(
+                `HTTP ${r.status} ${r.statusText}${
+                  msg ? ` - ${msg}` : ""
+                }`
+              );
             }
             return r.text();
           });
           setYamlStr(text);
-        } else if (activeTab === 'events' && !isNode) {
-          const ev = await apiJson(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/events`);
-          // sort by lastTimestamp desc
-          ev.sort((a, b) => new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0));
+        } else if (activeTab === "events" && !isNode) {
+          const ev = await apiJson(
+            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+              name
+            )}/events`
+          );
+          ev.sort(
+            (a, b) =>
+              new Date(b.lastTimestamp || 0) -
+              new Date(a.lastTimestamp || 0)
+          );
           setEvents(ev);
-        } else if (activeTab === 'logs' && canShowLogs) {
+        } else if (activeTab === "logs" && canShowLogs) {
           if (isNode) {
-            // ✅ Node kubelet logs
             const logText = await apiText(
               `/api/nodes/${encodeURIComponent(name)}/logs/kubelet.log`
             );
             setLogs(logText);
           } else {
-            // ✅ Pod logs (existing code, untouched)          
-        const podName = name;
+            // Pod logs
+            const podDetails = await apiJson(
+              `/api/resources/${encodeURIComponent(ns)}/pods/${encodeURIComponent(
+                name
+              )}/details`
+            );
 
-        // First fetch pod details to get a valid container name
-        const podDetails = await apiJson(
-            `/api/resources/${encodeURIComponent(ns)}/pods/${encodeURIComponent(podName)}/details`
-        );
+            const containerName =
+              podDetails?.spec?.containers?.[0]?.name;
+            if (!containerName) {
+              setLogs("No containers found in this pod.");
+              return;
+            }
 
-        const containerName = podDetails?.spec?.containers?.[0]?.name;
-
-        if (!containerName) {
-            console.error(`No container found for pod: ${podName}`);
-            setLogs("No containers found in this pod.");
-            return;
+            const logText = await apiText(
+              `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+                name
+              )}/${encodeURIComponent(containerName)}/logs`
+            );
+            setLogs(logText);
+          }
         }
-
-        // Now fetch logs for that container
-        const logText = await apiText(
-            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/logs`
-        );
-        setLogs(logText);
-        }
-       }
       } catch (e) {
-        console.error('Drawer load error:', e);
-        setError(e.message || 'Failed to load data.');
+        console.error("Drawer load error:", e);
+        setError(e.message || "Failed to load data.");
       } finally {
         setLoading(false);
       }
@@ -155,30 +154,31 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
     load();
   }, [open, resource, activeTab, canShowLogs, isNode]);
 
-  // reset when closed or target changes
+  // Reset when closed or resource changes
   useEffect(() => {
     if (!open) {
-      setActiveTab('overview');
+      setActiveTab("overview");
       setDetails(null);
-      setYamlStr('');
+      setYamlStr("");
       setEvents([]);
-      setLogs('');
-      setError('');
+      setLogs("");
+      setError("");
     }
   }, [open, resource?.name, resource?.namespace, resource?.type]);
 
   const title = useMemo(() => {
-    if (!resource) return 'Details';
+    if (!resource) return "Details";
     return `${resource.name} · ${resource.namespace}`;
-    // color palette comes from parent shells (indigo headers/borders)
   }, [resource]);
 
   const downloadYaml = () => {
-    const blob = new Blob([yamlStr || ''], { type: 'text/yaml;charset=utf-8' });
+    const blob = new Blob([yamlStr || ""], {
+      type: "text/yaml;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    const safeName = `${resource?.name || 'resource'}.yaml`;
+    const safeName = `${resource?.name || "resource"}.yaml`;
     a.download = safeName;
     document.body.appendChild(a);
     a.click();
@@ -188,29 +188,37 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
 
   return (
     <div
-      className={`fixed inset-0 z-50 ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
+      className={`fixed inset-0 z-50 ${
+        open ? "pointer-events-auto" : "pointer-events-none"
+      }`}
       aria-hidden={!open}
     >
       {/* backdrop */}
       <div
-        className={`absolute inset-0 bg-black/40 transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/40 transition-opacity ${
+          open ? "opacity-100" : "opacity-0"
+        }`}
         onClick={onClose}
       />
 
       {/* drawer panel */}
       <div
         className={`absolute right-0 top-0 h-full w-full sm:w-[560px] lg:w-[720px] transform transition-transform duration-300
-          ${open ? 'translate-x-0' : 'translate-x-full'}`}
+          ${open ? "translate-x-0" : "translate-x-full"}`}
       >
         <div className="h-full flex flex-col bg-white/90 backdrop-blur-md border-l border-gray-200 shadow-2xl">
           {/* header */}
           <div className="px-5 py-4 bg-indigo-700 text-white flex items-center justify-between">
             <div className="min-w-0">
-              <div className="text-sm uppercase tracking-wide text-indigo-200">Details</div>
+              <div className="text-sm uppercase tracking-wide text-indigo-200">
+                Details
+              </div>
               <div className="text-lg font-semibold truncate">{title}</div>
               {resource?.type && (
                 <div className="text-xs text-indigo-200 mt-0.5 truncate">
-                  Type: {resource.type} {resource.status ? '· ' : ''}{resource.status || ''}
+                  Type: {resource.type}{" "}
+                  {resource.status ? "· " : ""}
+                  {resource.status || ""}
                 </div>
               )}
             </div>
@@ -230,19 +238,19 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
                 <button
                   key={t}
                   className={`px-3 py-1.5 text-sm rounded-lg transition ${
-                    activeTab === t 
-                      ? 'bg-indigo-600 text-white shadow-inner'
-                      : 'text-indigo-700 hover:bg-indigo-100'
+                    activeTab === t
+                      ? "bg-indigo-600 text-white shadow-inner"
+                      : "text-indigo-700 hover:bg-indigo-100"
                   }`}
                   onClick={() => setActiveTab(t)}
                 >
-                  {t === 'overview'
-                    ? 'Overview'
-                    : t === 'yaml'
-                    ? 'YAML'
-                    : t === 'events'
-                    ? 'Events'
-                    : 'Logs'}
+                  {t === "overview"
+                    ? "Overview"
+                    : t === "yaml"
+                    ? "YAML"
+                    : t === "events"
+                    ? "Events"
+                    : "Logs"}
                 </button>
               ))}
             </div>
@@ -263,19 +271,19 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
               </div>
             )}
 
-            {!loading && !error && activeTab === 'overview' && (
+            {!loading && !error && activeTab === "overview" && (
               <Overview details={details} />
             )}
 
-            {!loading && !error && activeTab === 'yaml' && !isNode && (
+            {!loading && !error && activeTab === "yaml" && !isNode && (
               <YamlView yamlStr={yamlStr} onDownload={downloadYaml} />
             )}
 
-            {!loading && !error && activeTab === 'events' && !isNode && (
+            {!loading && !error && activeTab === "events" && !isNode && (
               <EventsView events={events} />
             )}
 
-            {!loading && !error && activeTab === 'logs' && canShowLogs && (
+            {!loading && !error && activeTab === "logs" && canShowLogs && (
               <LogsView logs={logs} />
             )}
           </div>
