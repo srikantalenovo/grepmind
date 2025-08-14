@@ -111,28 +111,43 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
           });
           setYamlStr(text);
 
-          } else if (activeTab === "events") {
-            let ev;
-            if (isNode) {
-              ev = await apiJson(
-               // `/api/cluster/nodes/${encodeURIComponent(name)}/events`
-                `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+          // } else if (activeTab === "events") {
+          //   let ev;
+          //   if (isNode) {
+          //     ev = await apiJson(
+          //      // `/api/cluster/nodes/${encodeURIComponent(name)}/events`
+          //       `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+          //     name
+          //   )}/events`
+          //     );
+          //   } else {
+          //     ev = await apiJson(
+          //       `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+          //         name
+          //       )}/events`
+          //     );
+          //   }
+
+          //   ev.sort(
+          //     (a, b) =>
+          //       new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0)
+          //   );
+          //   setEvents(ev);
+
+
+        } else if (activeTab === "events" && !isNode) {
+          const ev = await apiJson(
+            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
               name
             )}/events`
-              );
-            } else {
-              ev = await apiJson(
-                `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
-                  name
-                )}/events`
-              );
-            }
+          );
+          ev.sort(
+            (a, b) =>
+              new Date(b.lastTimestamp || 0) -
+              new Date(a.lastTimestamp || 0)
+          );
+          setEvents(ev);
 
-            ev.sort(
-              (a, b) =>
-                new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0)
-            );
-            setEvents(ev);
 
         } else if (activeTab === "logs" && canShowLogs) {
           if (isNode) {
