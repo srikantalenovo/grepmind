@@ -45,13 +45,14 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
 
   // ✅ Detect if this is a node
   const isNode = useMemo(() => {
-    return String(resource?.type || '').trim().toLowerCase().startsWith('node');
+    const type = String(resource?.type || '').toLowerCase();
+    return type === 'node' || type === 'nodes';
   }, [resource]);
 
   // ✅ Only show logs for nodes & pods
   const canShowLogs = useMemo(() => {
     const t = String(resource?.type || '').toLowerCase();
-    return ['pods', 'sparkapplications', 'nodes'].includes(t);
+    return ['pods', 'sparkapplications', 'node', 'nodes'].includes(t);
   }, [resource]);
 
   // ✅ Build tab list dynamically
@@ -64,11 +65,12 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
 
   // tabs list
   const availableTabs = useMemo(() => {
+    console.log('Detected type:', resource?.type, 'isNode:', isNode, 'canShowLogs:', canShowLogs);
     if (isNode) {
       return ['overview', 'logs'];
     }
     return ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
-  }, [isNode, canShowLogs]);
+  }, [isNode, canShowLogs, resource?.type]);
 
 
   // fetch detail data per tab
