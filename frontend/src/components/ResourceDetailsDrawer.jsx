@@ -135,7 +135,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
           //   setEvents(ev);
 
 
-        } else if (activeTab === "events" && !isNode) {
+        } else if (activeTab === "events") {
           const ev = await apiJson(
             `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
               name
