@@ -474,3 +474,44 @@ function formatStrategy(strategy) {
     : '';
   return `${type}${rolling}`;
 }
+//Clicking a node row opens the drawer.
+useEffect(() => {
+  const fetchDetails = async () => {
+    try {
+      if (type === "nodes") {
+        const nodeData = await apiJson(`/api/resources/${encodeURIComponent(name)}`);
+        setDetails(nodeData);
+      } else {
+        const data = await apiJson(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(name)}`);
+        setDetails(data);
+      }
+    } catch (err) {
+      console.error("Drawer load error:", err);
+      setError(err);
+    }
+  };
+
+  fetchDetails();
+}, [type, ns, name]);
+
+useEffect(() => {
+  const fetchLogs = async () => {
+    if (activeTab === "logs") {
+      try {
+        if (type === "nodes") {
+          const logText = await apiText(`/api/v1/nodes/${encodeURIComponent(name)}/proxy/logs/kubelet.log`);
+          setLogs(logText);
+        } else if (canShowLogs) {
+          const logText = await apiText(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/${encodeURIComponent(containerName)}/logs`);
+          setLogs(logText);
+        }
+      } catch (err) {
+        console.error("Log load error:", err);
+        setLogs(`Error loading logs: ${err.message}`);
+      }
+    }
+  };
+
+  fetchLogs();
+}, [activeTab, type, ns, name, containerName, canShowLogs]);
+

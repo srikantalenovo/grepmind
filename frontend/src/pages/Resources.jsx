@@ -327,7 +327,11 @@ export default function Resources() {
               )}
 
               {nodes.map(n => (
-                <div key={n.name} className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2">
+                <div
+                  key={n.name}
+                  className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 cursor-pointer"
+                  onClick={() => onSelectResource("nodes", n.name, null)} // null for cluster-scoped
+                >
                   <div className="flex items-center justify-between">
                     <div className="font-medium text-gray-900 truncate" title={n.name}>{n.name}</div>
                     <span className={`px-2 py-0.5 rounded-full text-xs text-white ${statusColor(n.status)}`}>

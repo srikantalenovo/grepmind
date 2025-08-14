@@ -19,7 +19,8 @@ import {
   getResourceDetails,
   getResourceYaml,
   getResourceEvents,
-  getPodLogs
+  getPodLogs,
+  getNodeKubeletLogs
 } from '../controllers/resourceDetailsController.js';
 import { rbac } from '../middleware/rbacMiddleware.js';
 
@@ -68,4 +69,12 @@ router.get(
   rbac(['viewer', 'editor', 'admin']),
   getPodLogs
 );
+
+// Get logs for a specific pod/
+router.get(
+  '/nodes/:nodeName/logs/kubelet',
+  rbac(['viewer', 'editor', 'admin']),
+  getNodeKubeletLogs
+);
+
 export default router;

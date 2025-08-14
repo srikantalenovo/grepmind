@@ -175,3 +175,22 @@ export const getPodLogs = async (req, res) => {
     res.status(500).json({ error: `Failed to fetch pod logs: ${err.message}` });
   }
 };
+
+
+// GET /api/nodes/:nodeName/logs/kubelet
+export const getNodeKubeletLogs = async (req, res) => {
+  const { nodeName } = req.params;
+  try {
+    const logs = (
+      await coreV1Api.connectGetNodeProxyWithPath(
+        nodeName,
+        `/logs/kubelet.log`
+      )
+    ).body;
+    res.setHeader("Content-Type", "text/plain");
+    res.send(logs);
+  } catch (err) {
+    console.error(`[ERROR] Failed to fetch kubelet logs for node ${nodeName}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch kubelet logs: ${err.message}` });
+  }
+};
