@@ -115,7 +115,10 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
             let ev;
             if (isNode) {
               ev = await apiJson(
-                `/api/cluster/nodes/${encodeURIComponent(name)}/events`
+               // `/api/cluster/nodes/${encodeURIComponent(name)}/events`
+                `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(
+              name
+            )}/events`
               );
             } else {
               ev = await apiJson(
