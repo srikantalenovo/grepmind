@@ -45,7 +45,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
 
   // ✅ Detect if this is a node
   const isNode = useMemo(() => {
-    return String(resource?.type || '').toLowerCase() === 'nodes';
+    return String(resource?.type || '').trim().toLowerCase().startsWith('node');
   }, [resource]);
 
   // ✅ Only show logs for nodes & pods
@@ -64,9 +64,10 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
 
   // tabs list
   const availableTabs = useMemo(() => {
-    return isNode
-      ? ['overview', 'logs'] // node → only these
-      : ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
+    if (isNode) {
+      return ['overview', 'logs'];
+    }
+    return ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
   }, [isNode, canShowLogs]);
 
 
