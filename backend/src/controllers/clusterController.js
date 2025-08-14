@@ -88,3 +88,68 @@ function getAge(creationTimestamp) {
   const m = Math.floor(diffMs / (1000 * 60));
   return `${m}m`;
 }
+
+export const getNodeDetails = async (req, res) => {
+  try {
+    const { name } = req.params;
+    if (!name) {
+      return res.status(400).json({ error: 'Node name is required' });
+    }
+
+    const result = await coreV1Api.readNode(name);
+    const node = result.body;
+
+    // Build a pod-like structure so the drawer doesn't break
+    const details = {
+      metadata: {
+        name: node.metadata?.name || name,
+        labels: node.metadata?.labels || {},
+        annotations: node.metadata?.annotations || {},
+        creationTimestamp: node.metadata?.creationTimestamp,
+      },
+      spec: {
+        // Nodes don’t have containers, but we map allocatable/capacity
+        taints: node.spec?.taints || [],
+        podCIDR: node.spec?.podCIDR,
+        providerID: node.spec?.providerID,
+      },
+      status: {
+        conditions: node.status?.conditions || [],
+        addresses: node.status?.addresses || [],
+        capacity: node.status?.capacity || {},
+        allocatable: node.status?.allocatable || {},
+        nodeInfo: node.status?.nodeInfo || {},
+      },
+    };
+
+    res.json(details);
+  } catch (err) {
+    console.error(`[ERROR] Failed to fetch node details for ${req.params.name}:`, err);
+    res.status(500).json({
+      error: `Failed to fetch node details for ${req.params.name}`,
+      details: err.message || String(err),
+    });
+  }
+};
+
+export const getNodeLogs = async (req, res) => {
+  try {
+    const { name } = req.params;
+    if (!name) {
+      return res.status(400).json({ error: 'Node name is required' });
+    }
+
+    // Note: Kubernetes doesn’t expose generic “node logs” directly.
+    // This example assumes you want kubelet logs via node proxy.
+    const kubeletLogs = await coreV1Api.connectGetNodeProxyWithPath(name, 'logs/kubelet.log');
+
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(kubeletLogs.body);
+  } catch (err) {
+    console.error(`[ERROR] Failed to fetch logs for node ${req.params.name}:`, err);
+    res.status(500).json({
+      error: `Failed to fetch logs for node ${req.params.name}`,
+      details: err.message || String(err),
+    });
+  }
+};
