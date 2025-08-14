@@ -61,7 +61,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
   }, [resource, isNode]);
 
   const availableTabs = useMemo(() => {
-    if (isNode) return ["overview", "logs"];
+    if (isNode) return ["overview", "events", "logs"];
     return ["overview", "yaml", "events", ...(canShowLogs ? ["logs"] : [])];
   }, [isNode, canShowLogs]);
 
