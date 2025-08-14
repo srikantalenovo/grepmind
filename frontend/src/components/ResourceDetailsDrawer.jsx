@@ -43,10 +43,16 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
   const [logs, setLogs] = useState('');
   const [error, setError] = useState('');
 
-  const isNode = useMemo(
-    () => String(resource?.type || "").toLowerCase() === "nodes",
-    [resource]
-  );
+  // const isNode = useMemo(
+  //   () => String(resource?.type || "").toLowerCase() === "nodes",
+  //   [resource]
+  // );
+  const isNode = useMemo(() => {
+    const t = String(resource?.type || "").toLowerCase();
+    if (t === "nodes") return true;
+    // Fallback detection — nodes often have `resource.kind` or `resource.nodeInfo`
+    return resource?.kind === "Node" || !!resource?.nodeInfo;
+  }, [resource]);
 
   const canShowLogs = useMemo(() => {
     if (isNode) return true;
