@@ -35,7 +35,7 @@ async function apiText(path) {
 }
 
 export default function ResourceDetailsDrawer({ open, onClose, resource }) {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('overview'); // overview | yaml | events | logs
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState(null);
   const [yamlStr, setYamlStr] = useState('');
@@ -43,28 +43,14 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
   const [logs, setLogs] = useState('');
   const [error, setError] = useState('');
 
-  // ✅ Detect if this is a node
-  const isNode = useMemo(() => {
-    return String(resource?.type || '').toLowerCase() === 'nodes';
-  }, [resource]);
-
-  // ✅ Only show logs for nodes & pods
   const canShowLogs = useMemo(() => {
     const t = String(resource?.type || '').toLowerCase();
-    return ['pods', 'sparkapplications', 'nodes'].includes(t);
+    return ['pods', 'sparkapplications'].includes(t); // spark apps: show driver logs if wired later
   }, [resource]);
-
-  // ✅ Build tab list dynamically
-  const availableTabs = useMemo(() => {
-    if (isNode) {
-      return ['overview', 'logs']; // only Overview + Logs for nodes
-    }
-    return ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
-  }, [isNode, canShowLogs]);
 
   // fetch detail data per tab
   useEffect(() => {
-    if (!open || !resource?.name) return;
+    if (!open || !resource?.name || !resource?.namespace) return;
 
     const t = normalizeType(resource.type);
     const ns = resource.namespace;
@@ -75,21 +61,13 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
       setLoading(true);
       try {
         if (activeTab === 'overview') {
-          if (isNode) {
-            // ✅ Direct node details call
-            const d = await apiJson(`/api/nodes/${encodeURIComponent(name)}/details`);
-            setDetails(d);
-          } else {
-            const d = await apiJson(
-              `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(t)}/${encodeURIComponent(name)}/details`
-            );
-            setDetails(d);
-          }
-        } else if (activeTab === 'yaml' && !isNode) {
-          const text = await fetch(
-            `${API_BASE}/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(t)}/${encodeURIComponent(name)}/yaml`,
-            { headers: { 'x-user-role': 'viewer' } }
-          ).then(async (r) => {
+          const d = await apiJson(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(t)}/${encodeURIComponent(name)}/details`);
+          setDetails(d);
+        } else if (activeTab === 'yaml') {
+          // backend returns YAML text; we also keep a parsed version to pretty re-dump if needed
+          const text = await fetch(`${API_BASE}/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(t)}/${encodeURIComponent(name)}/yaml`, {
+            headers: { 'x-user-role': 'viewer' },
+          }).then(async (r) => {
             if (!r.ok) {
               const msg = await r.text().catch(() => '');
               throw new Error(`HTTP ${r.status} ${r.statusText}${msg ? ` - ${msg}` : ''}`);
@@ -97,31 +75,42 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
             return r.text();
           });
           setYamlStr(text);
-        } else if (activeTab === 'events' && !isNode) {
+        } else if (activeTab === 'events') {
           const ev = await apiJson(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/events`);
+          // sort by lastTimestamp desc
           ev.sort((a, b) => new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0));
           setEvents(ev);
         } else if (activeTab === 'logs' && canShowLogs) {
-          if (isNode) {
+          if (t === 'nodes') {
             // ✅ Node kubelet logs
-            const logText = await apiText(`/api/nodes/${encodeURIComponent(name)}/logs/kubelet.log`);
+            const logText = await apiText(
+              `/api/nodes/${encodeURIComponent(name)}/logs/kubelet.log`
+            );
             setLogs(logText);
           } else {
-            // existing pod logs flow
-            const podDetails = await apiJson(
-              `/api/resources/${encodeURIComponent(ns)}/pods/${encodeURIComponent(name)}/details`
-            );
-            const containerName = podDetails?.spec?.containers?.[0]?.name;
-            if (!containerName) {
-              setLogs('No containers found in this pod.');
-              return;
-            }
-            const logText = await apiText(
-              `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/${encodeURIComponent(containerName)}/logs`
-            );
-            setLogs(logText);
-          }
+            // ✅ Pod logs (existing code, untouched)          
+        const podName = name;
+
+        // First fetch pod details to get a valid container name
+        const podDetails = await apiJson(
+            `/api/resources/${encodeURIComponent(ns)}/pods/${encodeURIComponent(podName)}/details`
+        );
+
+        const containerName = podDetails?.spec?.containers?.[0]?.name;
+
+        if (!containerName) {
+            console.error(`No container found for pod: ${podName}`);
+            setLogs("No containers found in this pod.");
+            return;
         }
+
+        // Now fetch logs for that container
+        const logText = await apiText(
+            `/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(podName)}/${encodeURIComponent(containerName)}/logs`
+        );
+        setLogs(logText);
+        }
+       }
       } catch (e) {
         console.error('Drawer load error:', e);
         setError(e.message || 'Failed to load data.');
@@ -131,7 +120,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
     };
 
     load();
-  }, [open, resource, activeTab, canShowLogs, isNode]);
+  }, [open, resource, activeTab, canShowLogs]);
 
   // reset when closed or target changes
   useEffect(() => {
@@ -147,11 +136,28 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
 
   const title = useMemo(() => {
     if (!resource) return 'Details';
-    return isNode ? resource.name : `${resource.name} · ${resource.namespace}`;
-  }, [resource, isNode]);
+    return `${resource.name} · ${resource.namespace}`;
+    // color palette comes from parent shells (indigo headers/borders)
+  }, [resource]);
+
+  const downloadYaml = () => {
+    const blob = new Blob([yamlStr || ''], { type: 'text/yaml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = `${resource?.name || 'resource'}.yaml`;
+    a.download = safeName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <div className={`fixed inset-0 z-50 ${open ? 'pointer-events-auto' : 'pointer-events-none'}`} aria-hidden={!open}>
+    <div
+      className={`fixed inset-0 z-50 ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
+      aria-hidden={!open}
+    >
       {/* backdrop */}
       <div
         className={`absolute inset-0 bg-black/40 transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}
@@ -184,26 +190,18 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
             </button>
           </div>
 
-          {/* ✅ updated tabs */}
+          {/* tabs */}
           <div className="px-5 pt-3">
             <div className="inline-flex bg-indigo-50 rounded-xl p-1 border border-indigo-100">
-              {availableTabs.map((t) => (
+              {['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])].map(t => (
                 <button
                   key={t}
                   className={`px-3 py-1.5 text-sm rounded-lg transition ${
-                    activeTab === t
-                      ? 'bg-indigo-600 text-white shadow-inner'
-                      : 'text-indigo-700 hover:bg-indigo-100'
+                    activeTab === t ? 'bg-indigo-600 text-white shadow-inner' : 'text-indigo-700 hover:bg-indigo-100'
                   }`}
                   onClick={() => setActiveTab(t)}
                 >
-                  {t === 'overview'
-                    ? 'Overview'
-                    : t === 'yaml'
-                    ? 'YAML'
-                    : t === 'events'
-                    ? 'Events'
-                    : 'Logs'}
+                  {t === 'overview' ? 'Overview' : t === 'yaml' ? 'YAML' : t === 'events' ? 'Events' : 'Logs'}
                 </button>
               ))}
             </div>
@@ -212,7 +210,9 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
           {/* body */}
           <div className="flex-1 overflow-y-auto px-5 pb-6 pt-4">
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 mb-4">{error}</div>
+              <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 mb-4">
+                {error}
+              </div>
             )}
 
             {loading && (
@@ -222,19 +222,27 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
               </div>
             )}
 
-            {!loading && !error && activeTab === 'overview' && <Overview details={details} />}
-            {!loading && !error && activeTab === 'yaml' && !isNode && (
+            {!loading && !error && activeTab === 'overview' && (
+              <Overview details={details} />
+            )}
+
+            {!loading && !error && activeTab === 'yaml' && (
               <YamlView yamlStr={yamlStr} onDownload={downloadYaml} />
             )}
-            {!loading && !error && activeTab === 'events' && !isNode && <EventsView events={events} />}
-            {!loading && !error && activeTab === 'logs' && canShowLogs && <LogsView logs={logs} />}
+
+            {!loading && !error && activeTab === 'events' && (
+              <EventsView events={events} />
+            )}
+
+            {!loading && !error && activeTab === 'logs' && canShowLogs && (
+              <LogsView logs={logs} />
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
-
 
 /* ---------- Sub-views (match your rounded/indigo style) ---------- */
 
