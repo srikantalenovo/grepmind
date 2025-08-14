@@ -55,12 +55,20 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
   }, [resource]);
 
   // ✅ Build tab list dynamically
+  // const availableTabs = useMemo(() => {
+  //   if (isNode) {
+  //     return ['overview', 'logs']; // only Overview + Logs for nodes
+  //   }
+  //   return ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
+  // }, [isNode, canShowLogs]);
+
+  // tabs list
   const availableTabs = useMemo(() => {
-    if (isNode) {
-      return ['overview', 'logs']; // only Overview + Logs for nodes
-    }
-    return ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
+    return isNode
+      ? ['overview', 'logs'] // node → only these
+      : ['overview', 'yaml', 'events', ...(canShowLogs ? ['logs'] : [])];
   }, [isNode, canShowLogs]);
+
 
   // fetch detail data per tab
   useEffect(() => {
@@ -219,7 +227,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
                 <button
                   key={t}
                   className={`px-3 py-1.5 text-sm rounded-lg transition ${
-                    activeTab === t
+                    activeTab === t 
                       ? 'bg-indigo-600 text-white shadow-inner'
                       : 'text-indigo-700 hover:bg-indigo-100'
                   }`}
@@ -256,11 +264,11 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
               <Overview details={details} />
             )}
 
-            {!loading && !error && activeTab === 'yaml' && (
+            {!loading && !error && activeTab === 'yaml' && !isNode && (
               <YamlView yamlStr={yamlStr} onDownload={downloadYaml} />
             )}
 
-            {!loading && !error && activeTab === 'events' && (
+            {!loading && !error && activeTab === 'events' && !isNode && (
               <EventsView events={events} />
             )}
 
