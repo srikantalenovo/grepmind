@@ -279,7 +279,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
               <YamlView yamlStr={yamlStr} onDownload={downloadYaml} />
             )}
 
-            {!loading && !error && activeTab === "events" && !isNode && (
+            {!loading && !error && activeTab === "events" && (
               <EventsView events={events} />
             )}
 
