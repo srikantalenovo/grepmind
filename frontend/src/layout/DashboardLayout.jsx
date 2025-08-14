@@ -31,12 +31,10 @@ export default function DashboardLayout() {
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      {/* Sidebar */}
-      <Sidebar
-        isOpen={isSidebarOpen}
-        setIsOpen={setIsSidebarOpen}
-        className="bg-indigo-100 border-r border-indigo-200"
-      />
+      {/* Sidebar wrapper with background color */}
+      <div className="bg-indigo-100 border-r border-indigo-200">
+        <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+      </div>
 
       {/* Main Content */}
       <div
@@ -49,4 +47,5 @@ export default function DashboardLayout() {
     </div>
   );
 }
+
 
