@@ -81,6 +81,14 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
           ev.sort((a, b) => new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0));
           setEvents(ev);
         } else if (activeTab === 'logs' && canShowLogs) {
+          if (t === 'nodes') {
+            // ✅ Node kubelet logs
+            const logText = await apiText(
+              `/api/nodes/${encodeURIComponent(name)}/logs/kubelet.log`
+            );
+            setLogs(logText);
+          } else {
+            // ✅ Pod logs (existing code, untouched)          
         const podName = name;
 
         // First fetch pod details to get a valid container name
@@ -102,6 +110,7 @@ export default function ResourceDetailsDrawer({ open, onClose, resource }) {
         );
         setLogs(logText);
         }
+       }
       } catch (e) {
         console.error('Drawer load error:', e);
         setError(e.message || 'Failed to load data.');
@@ -474,44 +483,3 @@ function formatStrategy(strategy) {
     : '';
   return `${type}${rolling}`;
 }
-//Clicking a node row opens the drawer.
-useEffect(() => {
-  const fetchDetails = async () => {
-    try {
-      if (type === "nodes") {
-        const nodeData = await apiJson(`/api/resources/${encodeURIComponent(name)}`);
-        setDetails(nodeData);
-      } else {
-        const data = await apiJson(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(name)}`);
-        setDetails(data);
-      }
-    } catch (err) {
-      console.error("Drawer load error:", err);
-      setError(err);
-    }
-  };
-
-  fetchDetails();
-}, [type, ns, name]);
-
-useEffect(() => {
-  const fetchLogs = async () => {
-    if (activeTab === "logs") {
-      try {
-        if (type === "nodes") {
-          const logText = await apiText(`/api/v1/nodes/${encodeURIComponent(name)}/proxy/logs/kubelet.log`);
-          setLogs(logText);
-        } else if (canShowLogs) {
-          const logText = await apiText(`/api/resources/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/${encodeURIComponent(containerName)}/logs`);
-          setLogs(logText);
-        }
-      } catch (err) {
-        console.error("Log load error:", err);
-        setLogs(`Error loading logs: ${err.message}`);
-      }
-    }
-  };
-
-  fetchLogs();
-}, [activeTab, type, ns, name, containerName, canShowLogs]);
-
