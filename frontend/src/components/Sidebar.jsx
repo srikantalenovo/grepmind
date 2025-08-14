@@ -50,7 +50,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       <div
         className={`h-full p-4 pt-6 flex flex-col justify-between shadow-lg transition-all duration-500 ease-in-out
           ${isOpen ? "w-64" : "w-20"} 
-          bg-white/20 backdrop-blur-lg border border-white/30 rounded-r-2xl`}
+          bg-indigo-500/30 backdrop-blur-lg border border-indigo-200 rounded-r-2xl`}
       >
         {/* Top Section */}
         <div>
