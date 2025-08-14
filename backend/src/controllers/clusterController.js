@@ -153,3 +153,46 @@ export const getNodeLogs = async (req, res) => {
     });
   }
 };
+
+
+export const getNodeEvents = async (req, res) => {
+  try {
+    const { name } = req.params;
+    if (!name) {
+      return res.status(400).json({ error: 'Node name is required' });
+    }
+
+    // Get all events (nodes are cluster-scoped, not namespace-scoped)
+    const result = await coreV1Api.listEventForAllNamespaces();
+    const items = result.body.items || [];
+
+    // Filter only events related to this node
+    const nodeEvents = items.filter(
+      e => e.involvedObject?.kind === 'Node' && e.involvedObject?.name === name
+    );
+
+    // Clean and map output
+    const events = nodeEvents.map(e => ({
+      type: e.type || '',
+      reason: e.reason || '',
+      message: e.message || '',
+      firstTimestamp: e.firstTimestamp || e.eventTime || '',
+      lastTimestamp: e.lastTimestamp || e.eventTime || '',
+      count: e.count || 1
+    }));
+
+    // Sort newest first
+    events.sort(
+      (a, b) =>
+        new Date(b.lastTimestamp || 0) - new Date(a.lastTimestamp || 0)
+    );
+
+    res.json(events);
+  } catch (err) {
+    console.error(`[ERROR] Failed to fetch events for node ${req.params.name}:`, err);
+    res.status(500).json({
+      error: `Failed to fetch events for node ${req.params.name}`,
+      details: err.message || String(err),
+    });
+  }
+};
