@@ -176,6 +176,17 @@ export default function Resources() {
     });
     setDrawerOpen(true);
   };
+//noderow click added
+
+const onNodeRowClick = (node) => {
+  setSelectedResource({
+    name: node.name,
+    namespace: 'default', // or "" if your backend expects empty
+    status: node.status,
+    type: 'nodes',
+  });
+  setDrawerOpen(true);
+};  
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6">
@@ -330,7 +341,8 @@ export default function Resources() {
                 <div
                   key={n.name}
                   className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 cursor-pointer"
-                  onClick={() => onSelectResource("nodes", n.name, null)} // null for cluster-scoped
+                  //onClick={() => onSelectResource("nodes", n.name, null)} // null for cluster-scoped
+                  onClick={() => onNodeRowClick(n)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="font-medium text-gray-900 truncate" title={n.name}>{n.name}</div>
