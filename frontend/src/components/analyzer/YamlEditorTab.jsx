@@ -1,253 +1,313 @@
 // src/components/YamlEditorTab.jsx
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Layers,
-  ChevronDown,
-  Loader2,
+  FolderTree,
+  SlidersHorizontal,
+  Search,
   RefreshCcw,
+  Loader2,
   FileDown,
   Save,
-  Search,
-  Edit3,
-} from 'lucide-react';
+  X,
+  ShieldAlert,
+  AlertCircle,
+} from "lucide-react";
+import Editor from "@monaco-editor/react";
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
-const DEFAULT_ROLE = 'editor';
+/**
+ * Production-grade YAML Editor with:
+ *  - Namespace → Kind → Resources (table)
+ *  - Inline YAML editor under the table
+ *  - Tailwind + Framer Motion animations
+ *  - Works with backend endpoints:
+ *      GET  /api/cluster/namespaces
+ *      GET  /api/analyzer/:namespace/:plural
+ *      (fallback: GET /api/analyzer/:plural?namespace=xxx if server is older)
+ *      GET  /api/analyzer/resource/:kind/:namespace/:name/yaml
+ *      PUT  /api/analyzer/resource/:kind/:namespace/:name/yaml
+ */
 
-// --------------- API helper ---------------
+const API_BASE = import.meta.env.VITE_API_BASE || "";
+const DEFAULT_ROLE = "editor";
+
+// ---- API helper
 async function apiFetch(path, opts = {}, role = DEFAULT_ROLE) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
       ...(opts.headers || {}),
-      'x-user-role': role,
-      'Content-Type': 'application/json',
+      "x-user-role": role,
+      "Content-Type": "application/json",
     },
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} - ${text || res.statusText}`);
+    const txt = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} - ${txt || res.statusText}`);
   }
+  // May return YAML (text) or JSON – try JSON first
   const text = await res.text();
   try {
     return JSON.parse(text);
   } catch {
-    return text; // raw YAML or plain string
+    return text;
   }
 }
 
-// --------------- Kinds ---------------
+// ---- Kinds
 const KIND_OPTIONS = [
-  { value: 'deployment',  label: 'Deployment',   plural: 'deployments' },
-  { value: 'pod',         label: 'Pod',          plural: 'pods' },
-  { value: 'service',     label: 'Service',      plural: 'services' },
-  { value: 'configmap',   label: 'ConfigMap',    plural: 'configmaps' },
-  { value: 'ingress',     label: 'Ingress',      plural: 'ingresses' },
-  { value: 'job',         label: 'Job',          plural: 'jobs' },
-  { value: 'statefulset', label: 'StatefulSet',  plural: 'statefulsets' },
-  { value: 'daemonset',   label: 'DaemonSet',    plural: 'daemonsets' },
-  { value: 'cronjob',     label: 'CronJob',      plural: 'cronjobs' },
-  // Secret intentionally not listed in the table for safety
+  { value: "deployment", label: "Deployment", plural: "deployments" },
+  { value: "pod", label: "Pod", plural: "pods" },
+  { value: "service", label: "Service", plural: "services" },
+  { value: "configmap", label: "ConfigMap", plural: "configmaps" },
+  { value: "ingress", label: "Ingress", plural: "ingresses" },
+  { value: "job", label: "Job", plural: "jobs" },
+  { value: "statefulset", label: "StatefulSet", plural: "statefulsets" },
+  { value: "daemonset", label: "DaemonSet", plural: "daemonsets" },
+  { value: "cronjob", label: "CronJob", plural: "cronjobs" },
+  // Secrets intentionally excluded from table-listing for safety
 ];
-const LISTABLE_KINDS = new Set(KIND_OPTIONS.map(k => k.value));
 
-// --------------- Small helpers ---------------
-const fmtAge = (iso) => {
-  try {
-    const t = new Date(iso).getTime();
-    const d = Math.max(0, Date.now() - t);
-    const mins = Math.floor(d / 60000);
-    if (mins < 60) return `${mins}m`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d`;
-  } catch {
-    return '-';
-  }
-};
+const LISTABLE_KINDS = new Set(KIND_OPTIONS.map((k) => k.value));
 
-// --------------- Component ---------------
+// ---- small utilities
+function parseItemsToRows(payload) {
+  // Accept: array of names, array of k8s objects, { items: [...] }, { names: [...] }
+  if (!payload) return [];
+  let items = [];
+  if (Array.isArray(payload)) items = payload;
+  else if (Array.isArray(payload.items)) items = payload.items;
+  else if (Array.isArray(payload.names)) return payload.names.map((n) => ({ name: n }));
+
+  return items
+    .map((it) => {
+      if (typeof it === "string") return { name: it };
+      const name = it?.metadata?.name || it?.name;
+      const ns = it?.metadata?.namespace || "";
+      const status =
+        it?.status?.phase ||
+        it?.status?.conditions?.find((c) => c.type === "Ready")?.status ||
+        it?.status?.availableReplicas ||
+        it?.status?.readyReplicas ||
+        "";
+      const creation = it?.metadata?.creationTimestamp || "";
+      return { name, namespace: ns, status, creation };
+    })
+    .filter((r) => r.name);
+}
+
+function classNames(...a) {
+  return a.filter(Boolean).join(" ");
+}
+
 export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
-  // selection
-  const [kind, setKind] = useState('deployment');
-  const [namespace, setNamespace] = useState('');
+  // selections
+  const [namespace, setNamespace] = useState("");
+  const [kind, setKind] = useState("deployment");
 
-  // data
+  // catalog
   const [namespaces, setNamespaces] = useState([]);
-  const [rows, setRows] = useState([]); // table rows [{name, namespace, age, ready, ...}]
-  const [filtered, setFiltered] = useState([]);
-  const [query, setQuery] = useState('');
+  const [resources, setResources] = useState([]); // [{name, status, creation}]
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // selection -> editor
-  const [selectedName, setSelectedName] = useState('');
-  const [yaml, setYaml] = useState('');
+  // active resource
+  const [activeName, setActiveName] = useState("");
+  const [yaml, setYaml] = useState("");
+  const [initialYaml, setInitialYaml] = useState(""); // for dirty check
 
-  // status flags
+  // busy states
   const [loadingNs, setLoadingNs] = useState(false);
-  const [loadingRows, setLoadingRows] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState(null); // {type,msg}
+  const [loadingList, setLoadingList] = useState(false);
+  const [loadingYaml, setLoadingYaml] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // ----------------------------------------------------------------
-  // load namespaces once
+  // status
+  const [toast, setToast] = useState(null); // {type, msg}
+  const [lastLoadedAt, setLastLoadedAt] = useState(null);
+
+  // refs
+  const mountedRef = useRef(true);
+
+  const kindMeta = useMemo(() => KIND_OPTIONS.find((k) => k.value === kind), [kind]);
+
+  const filteredResources = useMemo(() => {
+    if (!searchQuery) return resources;
+    const q = searchQuery.toLowerCase();
+    return resources.filter((r) => r.name.toLowerCase().includes(q) || (r.status + "").toLowerCase().includes(q));
+  }, [resources, searchQuery]);
+
+  const isDirty = yaml && initialYaml && yaml !== initialYaml;
+
+  // ---- Toast helper (auto-hide)
+  const showToast = useCallback((type, msg, ms = 2600) => {
+    setToast({ type, msg });
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => setToast(null), ms);
+  }, []);
+
+  // ---- Guard navigation if dirty
   useEffect(() => {
+    const handler = (e) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  // ---- Load namespaces on mount
+  useEffect(() => {
+    mountedRef.current = true;
     (async () => {
       try {
         setLoadingNs(true);
-        const resp = await apiFetch('/api/cluster/namespaces', {}, role);
+        const resp = await apiFetch("/api/cluster/namespaces", {}, role);
         const list = Array.isArray(resp) ? resp : resp?.namespaces || [];
         setNamespaces(list);
-        // prefer 'default' if present
-        const next = list.includes('default') ? 'default' : (list[0] || '');
-        setNamespace(next);
+        // set initial namespace
+        if (!namespace && list.length) {
+          setNamespace(list.includes("default") ? "default" : list[0]);
+        }
       } catch (e) {
-        setToast({ type: 'error', msg: `Namespaces: ${e.message}` });
+        showToast("error", e.message || "Failed to load namespaces");
       } finally {
         setLoadingNs(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [role]); // eslint-disable-line
 
-  const kindMeta = useMemo(() => KIND_OPTIONS.find(k => k.value === kind), [kind]);
-
-  // ----------------------------------------------------------------
-  // list resources for selected kind+namespace
-  const loadRows = useCallback(async () => {
-    if (!namespace || !LISTABLE_KINDS.has(kind)) return;
-    try {
-      setLoadingRows(true);
-      setSelectedName(''); // reset selection when listing changes
-      setYaml('');
-      const q = new URLSearchParams({ namespace });
-      const payload = await apiFetch(`/api/analyzer/${kindMeta.plural}?${q.toString()}`, {}, role);
-
-      // normalize to an array of items with metadata.name, metadata.namespace, status etc.
-      let items = [];
-      if (Array.isArray(payload)) {
-        items = payload;
-      } else if (Array.isArray(payload?.items)) {
-        items = payload.items;
+  // ---- List resources when namespace/kind changes
+  useEffect(() => {
+    if (!namespace || !kind || !LISTABLE_KINDS.has(kind)) {
+      setResources([]);
+      setActiveName("");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingList(true);
+        setResources([]);
+        setActiveName("");
+        setYaml("");
+        setInitialYaml("");
+        // Prefer new-style endpoint /api/analyzer/:namespace/:plural
+        const plural = kindMeta?.plural;
+        let payload;
+        try {
+          payload = await apiFetch(`/api/analyzer/${encodeURIComponent(namespace)}/${encodeURIComponent(plural)}`, {}, role);
+        } catch {
+          // Fallback to old-style endpoint /api/analyzer/:plural?namespace=xxx
+          const q = new URLSearchParams({ namespace });
+          payload = await apiFetch(`/api/analyzer/${encodeURIComponent(plural)}?${q.toString()}`, {}, role);
+        }
+        if (cancelled) return;
+        const rows = parseItemsToRows(payload);
+        setResources(rows);
+      } catch (e) {
+        showToast("error", e.message || "Failed to list resources");
+        setResources([]);
+      } finally {
+        if (!cancelled) setLoadingList(false);
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [namespace, kind, kindMeta, role]); // eslint-disable-line
 
-      const mapped = (items || [])
-        .map(it => {
-          if (typeof it === 'string') {
-            return { name: it, namespace, age: '-', ready: '-', obj: null };
-          }
-          const name = it?.metadata?.name;
-          if (!name) return null;
-          const ns = it?.metadata?.namespace || namespace;
-          const creationTs = it?.metadata?.creationTimestamp;
-          // compute a generic "ready" if present
-          let ready = '-';
-          // Pods
-          if (kind === 'pod') {
-            const cs = it?.status?.containerStatuses;
-            if (Array.isArray(cs) && cs.length > 0) {
-              const total = cs.length;
-              const readyCnt = cs.filter(c => c.ready).length;
-              ready = `${readyCnt}/${total}`;
-            } else {
-              ready = it?.status?.phase || '-';
-            }
-          }
-          // Deployments
-          if (kind === 'deployment') {
-            const rs = it?.status;
-            const readyCnt = rs?.readyReplicas ?? 0;
-            const total = rs?.replicas ?? 0;
-            ready = `${readyCnt}/${total}`;
-          }
-          // StatefulSets/DaemonSets/Jobs/etc. fall back to basic numbers when available
-          if (['statefulset','daemonset','job','cronjob'].includes(kind)) {
-            const rs = it?.status;
-            const readyCnt = rs?.readyReplicas ?? rs?.numberReady ?? rs?.active ?? 0;
-            const total = rs?.replicas ?? rs?.desiredNumberScheduled ?? rs?.succeeded ?? rs?.active ?? 0;
-            if (total !== 0 || readyCnt !== 0) ready = `${readyCnt}/${total}`;
-          }
-          return { name, namespace: ns, age: fmtAge(creationTs), ready, obj: it };
-        })
-        .filter(Boolean)
-        .sort((a, b) => a.name.localeCompare(b.name));
+  // ---- Fetch YAML for a chosen resource
+  const fetchYaml = useCallback(
+    async (name) => {
+      if (!name) return;
+      try {
+        setLoadingYaml(true);
+        const y = await apiFetch(
+          `/api/analyzer/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(
+            name
+          )}/yaml`,
+          {},
+          role
+        );
+        const text = typeof y === "string" ? y : y?.yaml || "";
+        setYaml(text);
+        setInitialYaml(text);
+        setLastLoadedAt(new Date());
+        showToast("success", "YAML loaded");
+      } catch (e) {
+        showToast("error", e.message || "Failed to load YAML");
+        setYaml("");
+        setInitialYaml("");
+      } finally {
+        setLoadingYaml(false);
+      }
+    },
+    [kind, namespace, role]
+  );
 
-      setRows(mapped);
-    } catch (e) {
-      setRows([]);
-      setToast({ type: 'error', msg: `List ${kindMeta.label}s: ${e.message}` });
-    } finally {
-      setLoadingRows(false);
+  // ---- Select a row (with dirty check)
+  const onSelectRow = async (name) => {
+    if (isDirty) {
+      const ok = window.confirm("You have unsaved changes. Discard and load another resource?");
+      if (!ok) return;
     }
-  }, [kind, namespace, role, kindMeta]);
+    setActiveName(name);
+    await fetchYaml(name);
+  };
 
-  useEffect(() => {
-    loadRows();
-  }, [loadRows]);
-
-  // simple client-side filter
-  useEffect(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) { setFiltered(rows); return; }
-    setFiltered(rows.filter(r => r.name.toLowerCase().includes(q)));
-  }, [rows, query]);
-
-  // ----------------------------------------------------------------
-  // load YAML for a row
-  const loadYaml = useCallback(async (name) => {
-    try {
-      setBusy(true);
-      const y = await apiFetch(`/api/analyzer/resource/${kind}/${namespace}/${name}/yaml`, {}, role);
-      const text = typeof y === 'string' ? y : (y?.yaml || '');
-      setYaml(text || '');
-      setSelectedName(name);
-      setToast({ type: 'success', msg: `Loaded ${kind} ${name}` });
-    } catch (e) {
-      setToast({ type: 'error', msg: `Load YAML: ${e.message}` });
-    } finally {
-      setBusy(false);
+  // ---- Save (Replace)
+  const onSave = async () => {
+    if (!activeName) return;
+    if (!yaml?.trim()) {
+      showToast("error", "YAML is empty");
+      return;
     }
-  }, [kind, namespace, role]);
-
-  // save YAML (replace)
-  const replaceYaml = useCallback(async () => {
-    if (!selectedName || !yaml.trim()) return;
     try {
-      setBusy(true);
+      setSaving(true);
       await apiFetch(
-        `/api/analyzer/resource/${kind}/${namespace}/${selectedName}/yaml`,
-        { method: 'PUT', body: JSON.stringify({ yaml }) },
+        `/api/analyzer/resource/${encodeURIComponent(kind)}/${encodeURIComponent(namespace)}/${encodeURIComponent(
+          activeName
+        )}/yaml`,
+        { method: "PUT", body: JSON.stringify({ yaml }) },
         role
       );
-      setToast({ type: 'success', msg: 'YAML replaced successfully.' });
-      // Optionally reload the list to reflect any spec-driven changes
-      // await loadRows();
+      setInitialYaml(yaml);
+      showToast("success", "YAML replaced successfully");
     } catch (e) {
-      setToast({ type: 'error', msg: `Replace YAML: ${e.message}` });
+      showToast("error", e.message || "Failed to replace YAML");
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
-  }, [kind, namespace, selectedName, yaml, role]);
+  };
 
-  const downloadYaml = () => {
-    const blob = new Blob([yaml || ''], { type: 'text/yaml' });
+  // ---- Download
+  const onDownload = () => {
+    const blob = new Blob([yaml || ""], { type: "text/yaml" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `${kind}-${namespace}-${selectedName || 'resource'}.yaml`;
+    a.download = `${kind}-${namespace}-${activeName || "resource"}.yaml`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const nsBadge = selectedName
-    ? `Selected: ${selectedName}`
-    : namespace ? `Namespace: ${namespace}` : '';
+  // ---- Reset editor
+  const onCancel = () => {
+    setYaml(initialYaml || "");
+    showToast("info", "Changes discarded");
+  };
 
-  // ----------------------------------------------------------------
+  // ---- UI
+  const nsBadge = lastLoadedAt ? `Last loaded: ${new Date(lastLoadedAt).toLocaleTimeString()}` : "Not loaded yet";
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       className="space-y-5"
@@ -262,114 +322,149 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
       </div>
 
       {/* Controls */}
-      <div className="grid gap-3 md:grid-cols-5">
-        {/* Kind */}
-        <div className="relative">
-          <select
-            value={kind}
-            onChange={(e) => { setKind(e.target.value); setSelectedName(''); setYaml(''); }}
-            className="w-full border rounded-2xl px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
-            {KIND_OPTIONS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-          </select>
-          <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        </div>
-
-        {/* Namespace */}
-        <div className="relative">
-          <select
-            value={namespace}
-            onChange={(e) => { setNamespace(e.target.value); setSelectedName(''); setYaml(''); }}
-            className="w-full border rounded-2xl px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
-            {namespaces.map(ns => <option key={ns} value={ns}>{ns}</option>)}
-          </select>
-          <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          {loadingNs && <Loader2 className="w-4 h-4 animate-spin absolute right-8 top-1/2 -translate-y-1/2 text-indigo-400" />}
-        </div>
-
-        {/* Search */}
-        <div className="col-span-2">
+      <div className="grid gap-3 md:grid-cols-12">
+        <div className="md:col-span-5">
           <div className="relative">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${kindMeta?.label}s…`}
-              className="w-full border rounded-2xl pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <select
+              value={namespace}
+              onChange={(e) => {
+                setNamespace(e.target.value);
+                setActiveName("");
+                setYaml("");
+                setInitialYaml("");
+              }}
+              className="w-full border rounded-2xl px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+            >
+              {namespaces.map((ns) => (
+                <option key={ns} value={ns}>
+                  {ns}
+                </option>
+              ))}
+            </select>
+            <FolderTree className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            {loadingNs && (
+              <Loader2 className="w-4 h-4 animate-spin absolute right-9 top-1/2 -translate-y-1/2 text-indigo-400" />
+            )}
           </div>
         </div>
 
-        {/* Reload list */}
-        <div className="flex items-center gap-2">
+        <div className="md:col-span-4">
+          <div className="relative">
+            <select
+              value={kind}
+              onChange={(e) => {
+                setKind(e.target.value);
+                setActiveName("");
+                setYaml("");
+                setInitialYaml("");
+              }}
+              className="w-full border rounded-2xl px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+            >
+              {KIND_OPTIONS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+            <SlidersHorizontal className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
+        </div>
+
+        <div className="md:col-span-3 flex items-center gap-2">
+          <div className="relative w-full">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter by name/status…"
+              className="w-full border rounded-2xl px-9 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
           <button
-            onClick={loadRows}
-            disabled={loadingRows}
-            className="w-full px-3 py-2 rounded-2xl border inline-flex items-center justify-center gap-2 hover:bg-gray-50 transition disabled:opacity-50"
+            onClick={() => {
+              // re-trigger listing
+              setKind((k) => k);
+            }}
+            className="px-3 py-2 rounded-2xl border inline-flex items-center gap-2 hover:bg-gray-50 transition"
             title="Refresh list"
           >
             <RefreshCcw className="w-4 h-4" />
-            {loadingRows ? 'Loading…' : 'Refresh'}
           </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white/80 backdrop-blur rounded-2xl border border-indigo-100 shadow-sm overflow-hidden">
+      <div className="rounded-2xl border bg-white/80 backdrop-blur">
+        <div className="px-4 py-3 border-b flex items-center justify-between">
+          <div className="font-semibold text-gray-700">
+            {namespace} / {kindMeta?.plural}
+          </div>
+          {loadingList && (
+            <div className="flex items-center gap-2 text-indigo-600 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading…
+            </div>
+          )}
+        </div>
+
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-indigo-50/60 text-indigo-900">
-              <tr>
-                <th className="text-left px-4 py-2 font-semibold">Name</th>
-                <th className="text-left px-4 py-2 font-semibold">Namespace</th>
-                <th className="text-left px-4 py-2 font-semibold">Ready</th>
-                <th className="text-left px-4 py-2 font-semibold">Age</th>
-                <th className="text-right px-4 py-2 font-semibold">Action</th>
+            <thead className="bg-gray-50">
+              <tr className="text-left text-gray-500">
+                <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">Created</th>
+                <th className="px-4 py-2 w-24">Action</th>
               </tr>
             </thead>
             <tbody>
               <AnimatePresence initial={false}>
-                {loadingRows && (
-                  [...Array(6)].map((_, i) => (
-                    <tr key={`sk-${i}`} className="border-t">
-                      <td className="px-4 py-3"><div className="h-3 w-40 bg-gray-200 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-3 w-24 bg-gray-200 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-3 w-16 bg-gray-200 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-3 w-10 bg-gray-200 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3 text-right"><div className="h-8 w-24 bg-gray-200 rounded animate-pulse ml-auto" /></td>
-                    </tr>
-                  ))
-                )}
-                {!loadingRows && filtered.length === 0 && (
-                  <tr className="border-t">
-                    <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
-                      No {kindMeta?.label}s found in <span className="font-medium">{namespace}</span>.
+                {filteredResources.length === 0 && !loadingList && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-10 text-center text-gray-500">
+                      No resources found. Try a different namespace/kind or refresh.
                     </td>
                   </tr>
                 )}
-                {!loadingRows && filtered.map(r => (
+                {filteredResources.map((r) => (
                   <motion.tr
                     key={r.name}
-                    initial={{ opacity: 0, y: 6 }}
+                    layout
+                    initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    className={`border-t hover:bg-indigo-50/40 transition ${selectedName === r.name ? 'bg-indigo-50/60' : ''}`}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18 }}
+                    className={classNames(
+                      "border-t hover:bg-indigo-50/40 cursor-pointer",
+                      activeName === r.name ? "bg-indigo-50/60" : "bg-white"
+                    )}
+                    onClick={() => onSelectRow(r.name)}
                   >
-                    <td className="px-4 py-3 font-medium text-indigo-900">{r.name}</td>
-                    <td className="px-4 py-3">{r.namespace}</td>
-                    <td className="px-4 py-3">{r.ready}</td>
-                    <td className="px-4 py-3">{r.age}</td>
+                    <td className="px-4 py-2 font-medium">{r.name}</td>
                     <td className="px-4 py-2">
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => loadYaml(r.name)}
-                          className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center gap-2 transition"
-                        >
-                          {busy && selectedName === r.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
-                          Edit YAML
-                        </button>
-                      </div>
+                      <span
+                        className={classNames(
+                          "inline-flex items-center px-2 py-0.5 rounded-full border text-xs",
+                          (r.status + "").toLowerCase().includes("running") ||
+                            (r.status + "").toLowerCase().includes("true")
+                            ? "bg-green-50 border-green-200 text-green-700"
+                            : "bg-amber-50 border-amber-200 text-amber-700"
+                        )}
+                      >
+                        {r.status || "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">{r.creation ? new Date(r.creation).toLocaleString() : "—"}</td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectRow(r.name);
+                        }}
+                        className="text-indigo-600 hover:text-indigo-800 underline"
+                      >
+                        Edit YAML
+                      </button>
                     </td>
                   </motion.tr>
                 ))}
@@ -379,60 +474,112 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
         </div>
       </div>
 
-      {/* Editor */}
-      <AnimatePresence>
-        {selectedName && (
+      {/* Secret caution (if user switches to secret via future enhancement) */}
+      {kind === "secret" && (
+        <div className="flex items-start gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2">
+          <ShieldAlert className="w-5 h-5 mt-0.5" />
+          <p className="text-sm">
+            Editing <span className="font-semibold">Secrets</span> may expose sensitive data. Ensure you are authorized.
+          </p>
+        </div>
+      )}
+
+      {/* Inline Editor */}
+      <AnimatePresence initial={false}>
+        {activeName && (
           <motion.div
-            key="editor"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white/80 backdrop-blur rounded-2xl border border-indigo-100 shadow-sm"
+            key="yaml-editor"
+            initial={{ opacity: 0, height: 0, y: -6 }}
+            animate={{ opacity: 1, height: "auto", y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -10 }}
+            transition={{ duration: 0.22 }}
+            className="rounded-2xl border bg-white/90 backdrop-blur shadow-sm overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 pt-4 pb-2">
-              <div className="text-sm">
-                <span className="font-semibold text-indigo-700">{kind}</span>
-                <span className="mx-2 text-gray-400">/</span>
-                <span className="font-semibold">{selectedName}</span>
-                <span className="mx-2 text-gray-400">in</span>
-                <span className="font-semibold">{namespace}</span>
-              </div>
+            <div className="px-4 py-3 border-b flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => loadYaml(selectedName)}
-                  disabled={busy}
-                  className="px-3 py-1.5 rounded-xl border inline-flex items-center gap-2 hover:bg-gray-50 transition disabled:opacity-50"
-                >
-                  <RefreshCcw className="w-4 h-4" /> Reload
-                </button>
-                <button
-                  onClick={downloadYaml}
-                  className="px-3 py-1.5 rounded-xl border inline-flex items-center gap-2 hover:bg-gray-50 transition"
-                >
-                  <FileDown className="w-4 h-4" /> Download
-                </button>
-                <button
-                  onClick={replaceYaml}
-                  disabled={busy || !yaml.trim()}
-                  className="px-3 py-1.5 rounded-xl bg-green-600 text-white hover:bg-green-700 inline-flex items-center gap-2 transition disabled:opacity-50"
-                >
-                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Replace
-                </button>
+                <span className="font-semibold text-gray-700">
+                  {namespace} / {kind} / {activeName}
+                </span>
+                {loadingYaml && <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />}
+                {isDirty && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full text-xs">
+                    <AlertCircle className="w-3 h-3" />
+                    Unsaved changes
+                  </span>
+                )}
               </div>
+              <button
+                onClick={() => {
+                  if (isDirty) {
+                    const ok = window.confirm("Discard unsaved changes and close?");
+                    if (!ok) return;
+                  }
+                  setActiveName("");
+                  setYaml("");
+                  setInitialYaml("");
+                }}
+                className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
+                title="Close editor"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <textarea
-              value={yaml}
-              onChange={(e) => setYaml(e.target.value)}
-              rows={22}
-              placeholder="YAML will appear here…"
-              className="w-full rounded-2xl p-4 font-mono text-sm outline-none"
-            />
+            <div className="p-3">
+              <div className="rounded-xl overflow-hidden border">
+                <Editor
+                  height="420px"
+                  defaultLanguage="yaml"
+                  language="yaml"
+                  theme="vs"
+                  value={yaml}
+                  onChange={(v) => setYaml(v ?? "")}
+                  options={{
+                    fontSize: 13,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    wordWrap: "on",
+                    automaticLayout: true,
+                  }}
+                />
+              </div>
 
-            <div className="px-4 pb-4 text-xs text-gray-500 italic">
-              {yaml ? `${(yaml.split('\n') || []).length} lines` : 'No content loaded'}
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>{yaml ? `${(yaml.split("\n") || []).length} lines` : "No content loaded"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={onDownload}
+                    className="px-3 py-2 rounded-2xl border inline-flex items-center gap-2 hover:bg-gray-50 transition"
+                    title="Download YAML"
+                  >
+                    <FileDown className="w-4 h-4" /> Download
+                  </button>
+                  <button
+                    disabled={!isDirty}
+                    onClick={onCancel}
+                    className={classNames(
+                      "px-3 py-2 rounded-2xl border inline-flex items-center gap-2 transition",
+                      isDirty ? "hover:bg-gray-50" : "opacity-50 cursor-not-allowed"
+                    )}
+                    title="Discard changes"
+                  >
+                    <X className="w-4 h-4" /> Discard
+                  </button>
+                  <button
+                    disabled={saving || !yaml?.trim()}
+                    onClick={onSave}
+                    className={classNames(
+                      "bg-green-600 text-white px-4 py-2 rounded-2xl inline-flex items-center gap-2 transition",
+                      saving ? "opacity-70" : "hover:bg-green-700"
+                    )}
+                  >
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Save
+                  </button>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -442,18 +589,17 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: 6 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            onAnimationComplete={() => {
-              // auto-hide after 2.5s
-              const t = setTimeout(() => setToast(null), 2500);
-              return () => clearTimeout(t);
-            }}
-            className={`fixed bottom-5 right-5 rounded-2xl px-4 py-3 shadow-lg border
-              ${toast.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' :
-                toast.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-700' :
-                'bg-indigo-50 border-indigo-200 text-indigo-700'}`}
+            exit={{ opacity: 0, y: -8 }}
+            className={classNames(
+              "fixed bottom-5 right-5 rounded-2xl px-4 py-3 shadow-lg border",
+              toast.type === "success"
+                ? "bg-green-50 border-green-200 text-green-700"
+                : toast.type === "error"
+                ? "bg-rose-50 border-rose-200 text-rose-700"
+                : "bg-indigo-50 border-indigo-200 text-indigo-700"
+            )}
           >
             {toast.msg}
           </motion.div>
@@ -462,3 +608,12 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
     </motion.div>
   );
 }
+
+/**
+ * Notes:
+ * - If your backend only supports the old list format (`/api/analyzer/:plural?namespace=xyz`),
+ *   the code auto-falls back to that when `/api/analyzer/:namespace/:plural` fails.
+ * - Make sure CORS / reverse proxy forwards the `x-user-role` header.
+ * - Install deps:
+ *     npm i @monaco-editor/react framer-motion lucide-react
+ */
