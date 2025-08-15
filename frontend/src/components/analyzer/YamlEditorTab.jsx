@@ -131,13 +131,13 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
   //}, [kind, namespace, role, resourceName]);
   }, [kind, namespace, role]);
 
-    // NEW: Auto-fetch YAML when namespace & resource are set
+  // Auto-fetch YAML when valid selection is made
   useEffect(() => {
-    if (namespace && resourceName) {
+    if (namespace && resourceName && resources.includes(resourceName)) {
       fetchYaml();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace, resourceName, kind]);
+  }, [namespace, resourceName, kind, resources]);
 
   const kindMeta = useMemo(() => KIND_OPTIONS.find(k => k.value === kind), [kind]);
 
