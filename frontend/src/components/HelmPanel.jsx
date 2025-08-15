@@ -6,6 +6,7 @@ import HelmReleaseDetailDrawer from './HelmReleaseDetailDrawer.jsx';
 import { HelmInstallModal, HelmUpgradeModal, HelmRollbackModal, HelmUninstallModal } from './HelmModals.jsx';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
+
 export default function HelmPanel({ role = 'editor' }) {
   const [releases, setReleases] = useState([]);
   const [search, setSearch] = useState('');
@@ -33,7 +34,6 @@ export default function HelmPanel({ role = 'editor' }) {
   async function fetchReleases() {
     try {
       const data = await apiFetch('/api/helm/releases');
-      // helm list --output json returns array already
       setReleases(Array.isArray(data) ? data : (data?.releases || []));
       setLastUpdated(new Date());
     } catch (e) {
@@ -79,6 +79,7 @@ export default function HelmPanel({ role = 'editor' }) {
           )}
         </div>
       </div>
+
       {lastUpdated && (
         <p className="text-sm text-gray-500 italic">
           Last updated: {lastUpdated.toLocaleTimeString()}
@@ -97,7 +98,7 @@ export default function HelmPanel({ role = 'editor' }) {
         />
       </motion.div>
 
-      {/* Drawers & Modals */}
+      {/* Drawer & Modals */}
       {detail && (
         <HelmReleaseDetailDrawer
           role={role}

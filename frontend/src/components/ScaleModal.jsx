@@ -1,63 +1,50 @@
 // src/components/ScaleModal.jsx
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { Boxes } from "lucide-react";
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
-
-export default function ScaleModal({ item, onClose, onConfirm, role = "editor" }) {
-  const [replicas, setReplicas] = useState(item?.details?.desired ?? item?.details?.available ?? 1);
-  const [loading, setLoading] = useState(false);
-
-  async function handleScale() {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/analyzer/scale`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-role": role },
-        body: JSON.stringify({ name: item.name, namespace: item.namespace, replicas: Number(replicas) }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onConfirm?.();
-      onClose();
-    } catch (e) {
-      console.error("Scale failed:", e);
-      alert("Scale failed: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+export default function ScaleModal({ item, onClose, onConfirm }) {
+  const [replicas, setReplicas] = useState(
+    Number(item?.details?.desired ?? item?.details?.available ?? 1)
+  );
 
   return (
-    <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
-        <div className="flex items-center gap-2 text-blue-600">
-          <Boxes className="w-5 h-5" />
-          <h3 className="text-lg font-bold">Scale Deployment</h3>
+    <div className="fixed inset-0 z-40">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.15 }}
+        className="absolute inset-0 m-auto h-max w-[92%] max-w-md bg-white rounded-2xl shadow-xl p-4"
+      >
+        <h3 className="text-lg font-semibold mb-2">
+          Scale Deployment {item.namespace}/{item.name}
+        </h3>
+        <div className="border rounded p-3 bg-gray-50 mb-3">
+          <div className="text-sm text-gray-700">
+            Current: <strong>{Number(item?.details?.available ?? 0)}</strong> available /{' '}
+            <strong>{Number(item?.details?.desired ?? 0)}</strong> desired
+          </div>
         </div>
-        <p className="mt-2 text-sm text-gray-600">
-          Set new replica count for <strong>{item.name}</strong> in <strong>{item.namespace}</strong>.
-        </p>
-        <label className="block text-sm mt-4">Replicas</label>
+        <label className="text-sm text-gray-600">Desired replicas</label>
         <input
           type="number"
-          min={0}
+          min="0"
           value={replicas}
           onChange={(e) => setReplicas(e.target.value)}
-          className="border rounded px-3 py-2 mt-1 w-full focus:outline-none focus:ring focus:border-blue-400"
+          className="w-full border rounded px-3 py-2 mt-1 mb-4"
         />
-        <div className="mt-6 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1 rounded bg-gray-100 hover:bg-gray-200">
+            Cancel
+          </button>
           <button
-            onClick={handleScale}
-            disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            onClick={() => onConfirm(replicas)}
+            className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
           >
-            {loading ? "Scaling..." : "Confirm Scale"}
+            Apply
           </button>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }

@@ -1,178 +1,190 @@
 // src/components/HelmModals.jsx
-import React, { useState } from "react";
-import { motion } from "framer-motion";
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-function ModalShell({ title, onClose, children, color = "indigo" }) {
+function ShellModalBase({ title, children, confirmLabel, confirmClass, onClose, onConfirm }) {
   return (
-    <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg">
-        <h3 className={`text-lg font-bold text-${color}-600`}>{title}</h3>
-        {children}
-        <div className="mt-6 text-right">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Close</button>
+    <div className="fixed inset-0 z-40">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.15 }}
+        className="absolute inset-0 m-auto h-max w-[92%] max-w-lg bg-white rounded-2xl shadow-xl p-4"
+      >
+        <h3 className="text-lg font-semibold mb-3">{title}</h3>
+        <div className="space-y-3">
+          {children}
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="px-3 py-1 rounded bg-gray-100 hover:bg-gray-200">
+              Cancel
+            </button>
+            <button onClick={onConfirm} className={`px-3 py-1 rounded text-white ${confirmClass}`}>
+              {confirmLabel}
+            </button>
+          </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }
 
-export function HelmInstallModal({ role = "editor", onClose, onDone }) {
-  const [form, setForm] = useState({ release: "", chart: "", namespace: "default", values: "" });
-  const [loading, setLoading] = useState(false);
+async function apiFetch(path, opts = {}, role = 'editor') {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      'x-user-role': role,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} - ${await res.text()}`);
+  return res.json();
+}
 
-  async function submit() {
-    setLoading(true);
+export function HelmInstallModal({ role = 'editor', onClose, onDone }) {
+  const [name, setName] = useState('');
+  const [namespace, setNamespace] = useState('default');
+  const [chart, setChart] = useState('');
+  const [valuesYaml, setValuesYaml] = useState('');
+
+  async function onConfirm() {
     try {
-      const res = await fetch(`${API_BASE}/api/helm/install`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-role": role },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onDone?.();
+      await apiFetch('/api/helm/install', {
+        method: 'POST',
+        body: JSON.stringify({ name, namespace, chart, values: valuesYaml }),
+      }, role);
       onClose();
+      onDone?.();
     } catch (e) {
-      alert("Install failed: " + e.message);
-    } finally {
-      setLoading(false);
+      console.error('helm install error', e);
     }
   }
 
   return (
-    <ModalShell title="Install Helm Release" onClose={onClose} color="green">
-      <div className="grid grid-cols-1 gap-3 mt-3">
-        <input className="border rounded px-3 py-2" placeholder="Release name"
-          value={form.release} onChange={(e) => setForm({ ...form, release: e.target.value })}/>
-        <input className="border rounded px-3 py-2" placeholder="Chart (repo/chart)"
-          value={form.chart} onChange={(e) => setForm({ ...form, chart: e.target.value })}/>
-        <input className="border rounded px-3 py-2" placeholder="Namespace"
-          value={form.namespace} onChange={(e) => setForm({ ...form, namespace: e.target.value })}/>
-        <textarea className="border rounded px-3 py-2" placeholder="values.yaml (optional)" rows={6}
-          value={form.values} onChange={(e) => setForm({ ...form, values: e.target.value })}/>
+    <ShellModalBase
+      title="Install Helm Release"
+      confirmLabel="Install"
+      confirmClass="bg-green-600 hover:bg-green-700"
+      onClose={onClose}
+      onConfirm={onConfirm}
+    >
+      <div className="grid grid-cols-1 gap-2">
+        <input className="border rounded px-3 py-2" placeholder="name" value={name} onChange={e => setName(e.target.value)} />
+        <input className="border rounded px-3 py-2" placeholder="namespace" value={namespace} onChange={e => setNamespace(e.target.value)} />
+        <input className="border rounded px-3 py-2" placeholder="chart (e.g. bitnami/nginx)" value={chart} onChange={e => setChart(e.target.value)} />
+        <textarea className="border rounded px-3 py-2 min-h-[140px]" placeholder="values.yaml (optional)" value={valuesYaml} onChange={e => setValuesYaml(e.target.value)} />
       </div>
-      <div className="mt-4 text-right">
-        <button onClick={submit} disabled={loading}
-          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-          {loading ? "Installing..." : "Install"}
-        </button>
-      </div>
-    </ModalShell>
+    </ShellModalBase>
   );
 }
 
-export function HelmUpgradeModal({ role = "editor", onClose, onDone, release }) {
-  const [form, setForm] = useState({ chart: release.chart || "", namespace: release.namespace, values: "" });
-  const [loading, setLoading] = useState(false);
+export function HelmUpgradeModal({ role = 'editor', release, onClose, onDone }) {
+  const [chart, setChart] = useState(release?.chart || '');
+  const [valuesYaml, setValuesYaml] = useState('');
 
-  async function submit() {
-    setLoading(true);
+  async function onConfirm() {
     try {
-      const res = await fetch(`${API_BASE}/api/helm/upgrade`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-role": role },
-        body: JSON.stringify({ name: release.name, ...form }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onDone?.();
+      await apiFetch('/api/helm/upgrade', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: release.name,
+          namespace: release.namespace,
+          chart,
+          values: valuesYaml,
+        }),
+      }, role);
       onClose();
+      onDone?.();
     } catch (e) {
-      alert("Upgrade failed: " + e.message);
-    } finally {
-      setLoading(false);
+      console.error('helm upgrade error', e);
     }
   }
 
   return (
-    <ModalShell title={`Upgrade ${release.name}`} onClose={onClose} color="blue">
-      <div className="grid grid-cols-1 gap-3 mt-3">
-        <input className="border rounded px-3 py-2" placeholder="Chart (repo/chart)"
-          value={form.chart} onChange={(e) => setForm({ ...form, chart: e.target.value })}/>
-        <textarea className="border rounded px-3 py-2" placeholder="values.yaml (optional)" rows={6}
-          value={form.values} onChange={(e) => setForm({ ...form, values: e.target.value })}/>
+    <ShellModalBase
+      title={`Upgrade ${release?.namespace}/${release?.name}`}
+      confirmLabel="Upgrade"
+      confirmClass="bg-blue-600 hover:bg-blue-700"
+      onClose={onClose}
+      onConfirm={onConfirm}
+    >
+      <div className="grid grid-cols-1 gap-2">
+        <input className="border rounded px-3 py-2" placeholder="chart (e.g. bitnami/nginx)" value={chart} onChange={e => setChart(e.target.value)} />
+        <textarea className="border rounded px-3 py-2 min-h-[140px]" placeholder="values.yaml (optional)" value={valuesYaml} onChange={e => setValuesYaml(e.target.value)} />
       </div>
-      <div className="mt-4 text-right">
-        <button onClick={submit} disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-          {loading ? "Upgrading..." : "Upgrade"}
-        </button>
-      </div>
-    </ModalShell>
+    </ShellModalBase>
   );
 }
 
-export function HelmRollbackModal({ role = "editor", onClose, onDone, release }) {
-  const [revision, setRevision] = useState(release.revision || "");
-  const [loading, setLoading] = useState(false);
+export function HelmRollbackModal({ role = 'editor', release, onClose, onDone }) {
+  const [revision, setRevision] = useState('');
 
-  async function submit() {
-    setLoading(true);
+  async function onConfirm() {
     try {
-      const res = await fetch(`${API_BASE}/api/helm/rollback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-role": role },
-        body: JSON.stringify({ name: release.name, namespace: release.namespace, revision }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onDone?.();
+      await apiFetch('/api/helm/rollback', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: release.name,
+          namespace: release.namespace,
+          revision: revision || undefined,
+        }),
+      }, role);
       onClose();
+      onDone?.();
     } catch (e) {
-      alert("Rollback failed: " + e.message);
-    } finally {
-      setLoading(false);
+      console.error('helm rollback error', e);
     }
   }
 
   return (
-    <ModalShell title={`Rollback ${release.name}`} onClose={onClose} color="amber">
-      <div className="grid grid-cols-1 gap-3 mt-3">
-        <input className="border rounded px-3 py-2" placeholder="Revision"
-          value={revision} onChange={(e) => setRevision(e.target.value)}/>
-      </div>
-      <div className="mt-4 text-right">
-        <button onClick={submit} disabled={loading}
-          className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50">
-          {loading ? "Rolling back..." : "Rollback"}
-        </button>
-      </div>
-    </ModalShell>
+    <ShellModalBase
+      title={`Rollback ${release?.namespace}/${release?.name}`}
+      confirmLabel="Rollback"
+      confirmClass="bg-amber-600 hover:bg-amber-700"
+      onClose={onClose}
+      onConfirm={onConfirm}
+    >
+      <input
+        className="border rounded px-3 py-2"
+        placeholder="revision (optional)"
+        value={revision}
+        onChange={e => setRevision(e.target.value)}
+      />
+    </ShellModalBase>
   );
 }
 
-export function HelmUninstallModal({ role = "admin", onClose, onDone, release }) {
-  const [loading, setLoading] = useState(false);
-
-  async function submit() {
-    setLoading(true);
+export function HelmUninstallModal({ role = 'admin', release, onClose, onDone }) {
+  async function onConfirm() {
     try {
-      const res = await fetch(`${API_BASE}/api/helm/uninstall`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-role": role },
-        body: JSON.stringify({ name: release.name, namespace: release.namespace }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onDone?.();
+      await apiFetch('/api/helm/uninstall', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: release.name,
+          namespace: release.namespace,
+        }),
+      }, role);
       onClose();
+      onDone?.();
     } catch (e) {
-      alert("Uninstall failed: " + e.message);
-    } finally {
-      setLoading(false);
+      console.error('helm uninstall error', e);
     }
   }
 
   return (
-    <ModalShell title={`Uninstall ${release.name}`} onClose={onClose} color="red">
-      <p className="mt-3 text-sm text-gray-600">
-        Are you sure you want to uninstall <strong>{release.name}</strong> from <strong>{release.namespace}</strong>?
+    <ShellModalBase
+      title={`Uninstall ${release?.namespace}/${release?.name}?`}
+      confirmLabel="Uninstall"
+      confirmClass="bg-rose-600 hover:bg-rose-700"
+      onClose={onClose}
+      onConfirm={onConfirm}
+    >
+      <p className="text-sm text-gray-600">
+        This will remove the release and its resources. This action cannot be undone.
       </p>
-      <div className="mt-4 text-right">
-        <button onClick={submit} disabled={loading}
-          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">
-          {loading ? "Uninstalling..." : "Confirm Uninstall"}
-        </button>
-      </div>
-    </ModalShell>
+    </ShellModalBase>
   );
 }
