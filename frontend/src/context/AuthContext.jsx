@@ -58,9 +58,11 @@ export const AuthProvider = ({ children }) => {
         break;
       case "editor":
         navigate("/resources");
+        navigate("/analyser");
         break;
       case "viewer":
         navigate("/logs");
+        navigate("/resources");
         break;
       default:
         navigate("/");

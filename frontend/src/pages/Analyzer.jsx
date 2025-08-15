@@ -1,5 +1,5 @@
 // src/pages/Analyzer.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useContext } from 'react';
 import { motion } from 'framer-motion';
 import AnalyzerTable from '../components/AnalyzerTable.jsx';
 import DetailsDrawer from '../components/DetailsDrawer.jsx';
@@ -9,7 +9,7 @@ import ConfirmModal from '../components/ConfirmModal.jsx';
 import HelmPanel from '../components/HelmPanel.jsx';
 
 // If you have an AuthContext:
-import { useAuth } from '../context/AuthContext'; // optional but recommended
+import { AuthContext } from '../context/AuthContext'; // optional but recommended
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 min
@@ -29,7 +29,7 @@ async function apiFetch(path, opts = {}, role = DEFAULT_ROLE) {
 }
 
 export default function Analyzer() {
-  const { user } = useAuth?.() || { user: null };
+  const { user } = useContext(AuthContext); 
   const role = user?.role || DEFAULT_ROLE;
 
   const [activeTab, setActiveTab] = useState('resources'); // 'resources' | 'helm'
