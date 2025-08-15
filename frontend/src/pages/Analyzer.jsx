@@ -1,4 +1,3 @@
-// src/pages/Analyzer.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import AnalyzerTable from '../components/AnalyzerTable.jsx';
@@ -9,7 +8,7 @@ import HelmPanel from '../components/HelmPanel.jsx';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 min
-const DEFAULT_ROLE = 'editor'; // change to 'admin' to test admin-only actions
+const DEFAULT_ROLE = 'editor';
 
 async function apiFetch(path, opts = {}, role = DEFAULT_ROLE) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -25,22 +24,30 @@ async function apiFetch(path, opts = {}, role = DEFAULT_ROLE) {
 }
 
 export default function Analyzer() {
-  const [activeTab, setActiveTab] = useState('problems'); // 'problems' | 'helm'
+  const [activeTab, setActiveTab] = useState('problems');
   const [problems, setProblems] = useState([]);
   const [search, setSearch] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const [detailsItem, setDetailsItem] = useState(null);
   const [restartItem, setRestartItem] = useState(null);
   const [scaleItem, setScaleItem] = useState(null);
 
   async function fetchProblems() {
+    setLoading(true);
+    setError('');
     try {
       const data = await apiFetch('/api/analyzer/problems');
-      setProblems(data.issues || []);
-      setLastUpdated(new Date(data.scannedAt || Date.now()));
+      setProblems(Array.isArray(data.issues) ? data.issues : []);
+      setLastUpdated(data.scannedAt ? new Date(data.scannedAt) : new Date());
     } catch (err) {
       console.error('Fetch problems error:', err);
+      setProblems([]);
+      setError('Failed to load problems. Please try again.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -52,8 +59,9 @@ export default function Analyzer() {
   }, [activeTab]);
 
   const filtered = useMemo(() => {
-    return problems.filter(p =>
-      (p.name || '').toLowerCase().includes(search.toLowerCase())
+    return (problems || []).filter(p =>
+      typeof p.name === 'string' &&
+      p.name.toLowerCase().includes(search.toLowerCase())
     );
   }, [problems, search]);
 
@@ -105,8 +113,10 @@ export default function Analyzer() {
             </div>
           </div>
 
-          {/* Timestamp */}
-          {lastUpdated && (
+          {/* Status Messages */}
+          {loading && <p className="text-sm text-gray-500">Loading problems...</p>}
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          {lastUpdated && !loading && !error && (
             <p className="text-sm text-gray-500 italic">
               Last updated: {new Date(lastUpdated).toLocaleTimeString()}
             </p>
@@ -118,12 +128,17 @@ export default function Analyzer() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25 }}
           >
-            <AnalyzerTable
-              data={filtered}
-              onDetails={setDetailsItem}
-              onRestart={setRestartItem}
-              onScale={setScaleItem}
-            />
+            {!loading && !error && filtered.length > 0 && (
+              <AnalyzerTable
+                data={filtered}
+                onDetails={setDetailsItem}
+                onRestart={setRestartItem}
+                onScale={setScaleItem}
+              />
+            )}
+            {!loading && !error && filtered.length === 0 && (
+              <p className="text-gray-500 italic mt-4">No problems found.</p>
+            )}
           </motion.div>
 
           {/* Modals & Drawer */}
