@@ -5,6 +5,8 @@ import authRoutes from './routes/authRoutes.js';
 import clusterRoutes from './routes/clusterRoutes.js';
 import resourcesRoutes from './routes/resourcesRoutes.js';
 import 'dotenv/config';
+import analyzerRoutes from './routes/analyzerRoutes.js';
+import helmRoutes from './routes/helmRoutes.js'
 
 const app = express();
 
@@ -21,6 +23,9 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/cluster', clusterRoutes);
 app.use('/api/resources', resourcesRoutes);
+app.use('/api/analyzer', analyzerRoutes);
+app.use('/api/helm', helmRoutes);
+
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
