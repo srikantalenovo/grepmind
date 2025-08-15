@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { problemScan } from '../controllers/analyzerController.js';
-import rbac from '../middleware/rbac.js';
+import { rbac } from '../middleware/rbacMiddleware.js';
 
 const router = Router();
 
