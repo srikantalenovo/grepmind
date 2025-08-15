@@ -1,229 +1,351 @@
-// src/controllers/analyzerController.js
-import { core, apps, objectApi, k8s } from '../utils/k8sClient.js';
-import yaml from 'js-yaml';
+import { core, apps, k8sYaml } from '../utils/k8sClient.js';
 
-/** Scan for problematic pods and enrich with owner + current replicas */
-export async function scanProblems(_req, res) {
+// ---------- Helpers ----------
+function getPodIssue(pod) {
+  const phase = pod?.status?.phase;
+  const cs = pod?.status?.containerStatuses || [];
+  const restarts = cs.reduce((sum, c) => sum + (c.restartCount || 0), 0);
+
+  const reasons = new Set(
+    cs.flatMap((c) => [
+      c?.state?.waiting?.reason,
+      c?.state?.terminated?.reason,
+      c?.lastState?.terminated?.reason,
+      c?.lastState?.waiting?.reason,
+    ]).filter(Boolean)
+  );
+
+  const cond = (pod.status?.conditions || []).find((c) => c.type === 'Ready');
+  const readyProblem = cond && (cond.status === 'False' || cond.status === 'Unknown')
+    ? cond.reason || 'NotReady'
+    : null;
+
+  if (phase !== 'Running') return phase || 'NotRunning';
+  if (restarts > 3) return `High restarts: ${restarts}`;
+  if (reasons.size) return Array.from(reasons).join(', ');
+  if (readyProblem) return readyProblem;
+  return null;
+}
+
+function toIssueRow(obj) {
+  return {
+    type: obj.type,
+    name: obj.name,
+    namespace: obj.namespace,
+    issue: obj.issue || 'Unknown',
+    nodeName: obj.nodeName || null,
+    details: obj.details || null,
+  };
+}
+
+// ---------- Namespaces ----------
+export async function listNamespaces(req, res) {
   try {
-    const podsResp = await core.listPodForAllNamespaces();
-    const problems = [];
+    const r = await core.listNamespace();
+    const items = r.body.items.map(n => n.metadata?.name).filter(Boolean);
+    res.json({ namespaces: ['all', ...items] });
+  } catch (e) {
+    console.error('listNamespaces error', e);
+    res.status(500).json({ error: e.message });
+  }
+}
 
-    for (const pod of podsResp.body.items) {
-      const phase = pod?.status?.phase;
-      const cs = pod?.status?.containerStatuses || [];
-      const restarts = cs.reduce((s, c) => s + (c.restartCount || 0), 0);
+// ---------- Pods with issues ----------
+export async function listPods(req, res) {
+  try {
+    const ns = req.query.namespace || 'all';
+    const issuesOnly = (req.query.issuesOnly ?? 'true') === 'true';
 
-      // Consider pod problematic if not Running, or high restarts, or not Ready
-      let isProblem = phase !== 'Running' || restarts > 3;
-      const readyCond = (pod.status?.conditions || []).find(c => c.type === 'Ready');
-      if (readyCond && (readyCond.status === 'False' || readyCond.status === 'Unknown')) isProblem = true;
+    const r = ns === 'all'
+      ? await core.listPodForAllNamespaces()
+      : await core.listNamespacedPod(ns);
 
-      if (!isProblem) continue;
-
-      let ownerKind = null;
-      let ownerName = null;
-      let currentReplicas = null;
-
-      const ns = pod.metadata?.namespace;
-      const ownerRef = pod.metadata?.ownerReferences?.[0];
-
-      if (ownerRef) {
-        ownerKind = ownerRef.kind;
-        ownerName = ownerRef.name;
-
-        try {
-          if (ownerKind === 'ReplicaSet') {
-            const rs = await apps.readNamespacedReplicaSet(ownerName, ns);
-            const depOwner = rs.body.metadata?.ownerReferences?.find(o => o.kind === 'Deployment');
-            if (depOwner) {
-              ownerKind = 'Deployment';
-              ownerName = depOwner.name;
-              const scale = await apps.readNamespacedDeploymentScale(ownerName, ns);
-              currentReplicas = scale.body?.spec?.replicas ?? null;
-            }
-          } else if (ownerKind === 'StatefulSet') {
-            const scale = await apps.readNamespacedStatefulSetScale(ownerName, ns);
-            currentReplicas = scale.body?.spec?.replicas ?? null;
-          } else if (ownerKind === 'DaemonSet') {
-            // DaemonSets are not user-scalable
-            currentReplicas = null;
-          }
-        } catch {
-          // ignore owner resolution errors
-        }
-      }
-
-      problems.push({
+    const rows = [];
+    for (const pod of r.body.items || []) {
+      const issue = getPodIssue(pod);
+      if (issuesOnly && !issue) continue;
+      if (!issue) continue; // Analyzer Resources tab only shows issues
+      rows.push(toIssueRow({
+        type: 'Pod',
         name: pod.metadata?.name,
-        namespace: ns,
-        status: phase,
-        issue: pod.status?.reason || readyCond?.reason || (restarts > 3 ? `High restarts: ${restarts}` : 'NotHealthy'),
-        error: pod.status?.message || null,
-        ownerKind,
-        ownerName,
-        currentReplicas
-      });
+        namespace: pod.metadata?.namespace,
+        issue,
+        nodeName: pod.spec?.nodeName || null,
+        details: {
+          phase: pod?.status?.phase,
+          restarts: (pod?.status?.containerStatuses || []).reduce((s, c) => s + (c.restartCount || 0), 0),
+          reasons: (pod?.status?.containerStatuses || []).map(c => c?.state?.waiting?.reason || c?.state?.terminated?.reason).filter(Boolean),
+        },
+      }));
     }
-
-    res.json({ issues: problems });
-  } catch (err) {
-    console.error('scanProblems error:', err);
-    res.status(500).json({ error: err.message });
+    res.json({ items: rows, scannedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error('listPods error', e);
+    res.status(500).json({ error: e.message });
   }
 }
 
-/** Restart pod: delete it and let controller recreate */
-export async function restartPod(req, res) {
-  const { namespace, name } = req.body || {};
-  if (!namespace || !name) return res.status(400).json({ error: 'namespace and name are required' });
-
+// ---------- Deployments with issues ----------
+export async function listDeployments(req, res) {
   try {
-    await core.deleteNamespacedPod(name, namespace);
-    res.json({ ok: true, message: `Pod ${name} deleted (restart triggered)` });
-  } catch (err) {
-    console.error('restartPod error:', err);
-    res.status(500).json({ error: err.message });
+    const ns = req.query.namespace || 'all';
+    const r = ns === 'all'
+      ? await apps.listDeploymentForAllNamespaces()
+      : await apps.listNamespacedDeployment(ns);
+
+    const rows = [];
+    for (const dep of r.body.items || []) {
+      const desired = dep.spec?.replicas ?? 0;
+      const available = dep.status?.availableReplicas ?? 0;
+      const updated = dep.status?.updatedReplicas ?? 0;
+      if (available < desired) {
+        rows.push(toIssueRow({
+          type: 'Deployment',
+          name: dep.metadata?.name,
+          namespace: dep.metadata?.namespace,
+          issue: `Unhealthy: ${available}/${desired} available (updated ${updated})`,
+          details: { desired, available, updated },
+        }));
+      }
+    }
+    res.json({ items: rows, scannedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error('listDeployments error', e);
+    res.status(500).json({ error: e.message });
   }
 }
 
-/** Scale workload (Deployment or StatefulSet) */
-export async function scaleWorkload(req, res) {
-  const { namespace, kind, name, replicas } = req.body || {};
-  if (!namespace || !kind || !name || typeof replicas !== 'number')
-    return res.status(400).json({ error: 'namespace, kind, name, replicas are required' });
-
+// ---------- Services with issues (very simple: no endpoints, just warn if no endpoints found) ----------
+export async function listServices(req, res) {
   try {
-    if (kind === 'Deployment') {
-      const sc = await apps.readNamespacedDeploymentScale(name, namespace);
-      sc.body.spec.replicas = replicas;
-      await apps.replaceNamespacedDeploymentScale(name, namespace, sc.body);
-      return res.json({ ok: true, message: `Deployment ${name} scaled to ${replicas}` });
+    const ns = req.query.namespace || 'all';
+    const svcResp = ns === 'all'
+      ? await core.listServiceForAllNamespaces()
+      : await core.listNamespacedService(ns);
+
+    // Build Endpoints map
+    const epResp = ns === 'all'
+      ? await core.listEndpointsForAllNamespaces()
+      : await core.listNamespacedEndpoints(ns);
+
+    const byKey = new Map();
+    for (const ep of epResp.body.items || []) {
+      const k = `${ep.metadata?.namespace}/${ep.metadata?.name}`;
+      const subsets = ep.subsets || [];
+      const hasAddr = subsets.some(s => (s.addresses || []).length > 0);
+      byKey.set(k, hasAddr);
     }
-    if (kind === 'StatefulSet') {
-      const sc = await apps.readNamespacedStatefulSetScale(name, namespace);
-      sc.body.spec.replicas = replicas;
-      await apps.replaceNamespacedStatefulSetScale(name, namespace, sc.body);
-      return res.json({ ok: true, message: `StatefulSet ${name} scaled to ${replicas}` });
+
+    const rows = [];
+    for (const svc of svcResp.body.items || []) {
+      const k = `${svc.metadata?.namespace}/${svc.metadata?.name}`;
+      const hasEndpoints = byKey.get(k) === true;
+      if (!hasEndpoints) {
+        rows.push(toIssueRow({
+          type: 'Service',
+          name: svc.metadata?.name,
+          namespace: svc.metadata?.namespace,
+          issue: 'No ready endpoints',
+          details: { type: svc.spec?.type, ports: svc.spec?.ports?.map(p => p.port) || [] },
+        }));
+      }
     }
-    // DaemonSet not supported for scaling
-    return res.status(400).json({ error: `Scaling kind ${kind} is not supported` });
-  } catch (err) {
-    console.error('scaleWorkload error:', err);
-    res.status(500).json({ error: err.message });
+    res.json({ items: rows, scannedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error('listServices error', e);
+    res.status(500).json({ error: e.message });
   }
 }
 
-/** Apply manifest (multi-doc YAML accepted) using KubernetesObjectApi */
-export async function applyManifest(req, res) {
-  const { yamlText } = req.body || {};
-  if (!yamlText) return res.status(400).json({ error: 'yamlText is required' });
-
+// ---------- Problem scan (pods + deployments + warning events) ----------
+export async function problemScan(req, res) {
   try {
-    const docs = yaml.loadAll(yamlText).filter(Boolean);
-    const results = [];
+    const issues = [];
 
-    for (const doc of docs) {
-      // server-side apply via PATCH (apply) could be used, but generic create/patch works well
-      // Try create; if exists, patch
-      try {
-        // Ensure required fields
-        if (!doc.apiVersion || !doc.kind || !doc.metadata?.name)
-          throw new Error('Invalid manifest: apiVersion/kind/metadata.name required');
-        // Namespace defaulting for namespaced kinds
-        const namespaced = !['Namespace', 'Node', 'PersistentVolume', 'ClusterRole', 'ClusterRoleBinding', 'CustomResourceDefinition'].includes(doc.kind);
-        if (namespaced && !doc.metadata.namespace) doc.metadata.namespace = 'default';
-
-        const createRes = await objectApi.create(doc);
-        results.push({ name: doc.metadata.name, kind: doc.kind, action: 'created', statusCode: createRes.response.statusCode });
-      } catch (e) {
-        if (e?.response?.statusCode === 409) {
-          // Exists — patch it
-          const patchRes = await objectApi.patch(
-            doc,
-            undefined,
-            undefined,
-            undefined,
-            {
-              headers: { 'Content-Type': 'application/merge-patch+json' }
-            }
-          );
-          results.push({ name: doc.metadata.name, kind: doc.kind, action: 'patched', statusCode: patchRes.response.statusCode });
-        } else {
-          throw e;
+    // Pods
+    {
+      const podsResp = await core.listPodForAllNamespaces();
+      for (const pod of podsResp.body.items) {
+        const issue = getPodIssue(pod);
+        if (issue) {
+          issues.push(toIssueRow({
+            type: 'Pod',
+            name: pod.metadata?.name,
+            namespace: pod.metadata?.namespace,
+            issue,
+            nodeName: pod.spec?.nodeName || null,
+          }));
         }
       }
     }
 
-    res.json({ ok: true, results });
-  } catch (err) {
-    console.error('applyManifest error:', err);
-    res.status(500).json({ error: err.message });
-  }
-}
-
-/** Delete resource (generic) via KubernetesObjectApi */
-export async function deleteResource(req, res) {
-  const { apiVersion, kind, name, namespace } = req.body || {};
-  if (!apiVersion || !kind || !name)
-    return res.status(400).json({ error: 'apiVersion, kind, name are required' });
-
-  try {
-    const obj = { apiVersion, kind, metadata: { name, namespace } };
-    const del = await objectApi.delete(obj);
-    res.json({ ok: true, statusCode: del.response.statusCode });
-  } catch (err) {
-    console.error('deleteResource error:', err);
-    res.status(500).json({ error: err.message });
-  }
-}
-
-/** View secret (admin only) */
-export async function viewSecret(req, res) {
-  const { namespace, name } = req.params;
-  if (!namespace || !name) return res.status(400).json({ error: 'namespace and name are required' });
-
-  try {
-    const sec = await core.readNamespacedSecret(name, namespace);
-    const data = sec.body.data || {};
-    // Decode base64 values
-    const decoded = {};
-    for (const [k, v] of Object.entries(data)) {
-      decoded[k] = Buffer.from(v, 'base64').toString('utf8');
-    }
-    res.json({ metadata: sec.body.metadata, type: sec.body.type, data: decoded });
-  } catch (err) {
-    console.error('viewSecret error:', err);
-    res.status(500).json({ error: err.message });
-  }
-}
-
-/** Edit resource via YAML (replace) */
-export async function editYaml(req, res) {
-  const { yamlText } = req.body || {};
-  if (!yamlText) return res.status(400).json({ error: 'yamlText is required' });
-
-  try {
-    const obj = yaml.load(yamlText);
-    if (!obj?.apiVersion || !obj?.kind || !obj?.metadata?.name) {
-      return res.status(400).json({ error: 'Invalid YAML: apiVersion, kind, metadata.name required' });
-    }
-    const namespaced = !['Namespace', 'Node', 'PersistentVolume', 'ClusterRole', 'ClusterRoleBinding', 'CustomResourceDefinition'].includes(obj.kind);
-    if (namespaced && !obj.metadata.namespace) obj.metadata.namespace = 'default';
-
-    // Try replace; if not found, create
-    try {
-      const replace = await objectApi.replace(obj);
-      res.json({ ok: true, action: 'replaced', statusCode: replace.response.statusCode });
-    } catch (e) {
-      if (e?.response?.statusCode === 404) {
-        const create = await objectApi.create(obj);
-        res.json({ ok: true, action: 'created', statusCode: create.response.statusCode });
-      } else {
-        throw e;
+    // Deployments
+    {
+      const depResp = await apps.listDeploymentForAllNamespaces();
+      for (const dep of depResp.body.items) {
+        const desired = dep.spec?.replicas ?? 0;
+        const available = dep.status?.availableReplicas ?? 0;
+        const updated = dep.status?.updatedReplicas ?? 0;
+        if (available < desired) {
+          issues.push(toIssueRow({
+            type: 'Deployment',
+            name: dep.metadata?.name,
+            namespace: dep.metadata?.namespace,
+            issue: `Unhealthy: ${available}/${desired} available (updated ${updated})`,
+            details: { desired, available, updated },
+          }));
+        }
       }
     }
-  } catch (err) {
-    console.error('editYaml error:', err);
-    res.status(500).json({ error: err.message });
+
+    // Warning Events (best-effort)
+    try {
+      const evtResp = await core.listEventForAllNamespaces();
+      for (const e of evtResp.body.items || []) {
+        const involved = e.involvedObject || {};
+        if (e.type === 'Warning' && involved.kind && involved.name) {
+          issues.push(toIssueRow({
+            type: `Event/${involved.kind}`,
+            name: involved.name,
+            namespace: involved.namespace || 'default',
+            issue: e.reason || 'Warning',
+            details: { message: e.message?.slice(0, 250) },
+          }));
+        }
+      }
+    } catch (_) {}
+
+    res.json({ issues, scannedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error('problemScan error', e);
+    res.status(500).json({ error: e.message });
+  }
+}
+
+// ---------- Actions ----------
+export async function restartResource(req, res) {
+  try {
+    const { type, namespace, name } = req.body || {};
+    if (!type || !namespace || !name) return res.status(400).json({ error: 'type, namespace, name required' });
+
+    if (type === 'Pod') {
+      await core.deleteNamespacedPod(name, namespace);
+      return res.json({ ok: true, message: `Pod ${namespace}/${name} deleted (restarted via controller)` });
+    }
+
+    if (type === 'Deployment') {
+      // patch annotation to force rollout
+      const patch = [
+        {
+          op: 'add',
+          path: '/spec/template/metadata/annotations',
+          value: { 'kubectl.kubernetes.io/restartedAt': new Date().toISOString() }
+        }
+      ];
+      await apps.patchNamespacedDeployment(
+        name, namespace, patch, undefined, undefined, undefined, undefined,
+        { headers: { 'Content-Type': 'application/json-patch+json' } }
+      );
+      return res.json({ ok: true, message: `Deployment ${namespace}/${name} restarted` });
+    }
+
+    return res.status(400).json({ error: `Unsupported type for restart: ${type}` });
+  } catch (e) {
+    console.error('restartResource error', e);
+    res.status(500).json({ error: e.message });
+  }
+}
+
+export async function scaleDeployment(req, res) {
+  try {
+    const { namespace, name, replicas } = req.body || {};
+    if (replicas == null) return res.status(400).json({ error: 'replicas required' });
+    const body = { spec: { replicas: Number(replicas) } };
+    const r = await apps.patchNamespacedDeploymentScale(
+      name, namespace, body, undefined, undefined, undefined, undefined,
+      { headers: { 'Content-Type': 'application/merge-patch+json' } }
+    );
+    res.json({ ok: true, scale: r.body.spec.replicas });
+  } catch (e) {
+    console.error('scaleDeployment error', e);
+    res.status(500).json({ error: e.message });
+  }
+}
+
+export async function deleteResource(req, res) {
+  try {
+    const { type, namespace, name } = req.body || {};
+    if (!type || !namespace || !name) return res.status(400).json({ error: 'type, namespace, name required' });
+
+    if (type === 'Pod') {
+      await core.deleteNamespacedPod(name, namespace);
+      return res.json({ ok: true });
+    }
+    if (type === 'Deployment') {
+      await apps.deleteNamespacedDeployment(name, namespace);
+      return res.json({ ok: true });
+    }
+    if (type === 'Service') {
+      await core.deleteNamespacedService(name, namespace);
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: `Unsupported type for delete: ${type}` });
+  } catch (e) {
+    console.error('deleteResource error', e);
+    res.status(500).json({ error: e.message });
+  }
+}
+
+// ---------- YAML get/replace ----------
+export async function getYaml(req, res) {
+  try {
+    const { type, namespace, name } = req.params;
+    const kind = type.toLowerCase();
+
+    if (kind === 'pod') {
+      const r = await core.readNamespacedPod(name, namespace);
+      return res.type('text/yaml').send(k8sYaml.dumpYaml(r.body));
+    }
+    if (kind === 'deployment') {
+      const r = await apps.readNamespacedDeployment(name, namespace);
+      return res.type('text/yaml').send(k8sYaml.dumpYaml(r.body));
+    }
+    if (kind === 'service') {
+      const r = await core.readNamespacedService(name, namespace);
+      return res.type('text/yaml').send(k8sYaml.dumpYaml(r.body));
+    }
+    return res.status(400).json({ error: 'Unsupported type' });
+  } catch (e) {
+    console.error('getYaml error', e);
+    res.status(500).json({ error: e.message });
+  }
+}
+
+export async function putYaml(req, res) {
+  try {
+    const { type, namespace, name } = req.params;
+    const { yaml } = req.body || {};
+    if (!yaml) return res.status(400).json({ error: 'yaml is required' });
+
+    const obj = k8sYaml.loadYaml(yaml);
+    const kind = type.toLowerCase();
+
+    // Replace via put
+    if (kind === 'pod') {
+      const r = await core.replaceNamespacedPod(name, namespace, obj);
+      return res.json({ ok: true, uid: r.body.metadata?.uid });
+    }
+    if (kind === 'deployment') {
+      const r = await apps.replaceNamespacedDeployment(name, namespace, obj);
+      return res.json({ ok: true, uid: r.body.metadata?.uid });
+    }
+    if (kind === 'service') {
+      const r = await core.replaceNamespacedService(name, namespace, obj);
+      return res.json({ ok: true, uid: r.body.metadata?.uid });
+    }
+    return res.status(400).json({ error: 'Unsupported type' });
+  } catch (e) {
+    console.error('putYaml error', e);
+    res.status(500).json({ error: e.message });
   }
 }

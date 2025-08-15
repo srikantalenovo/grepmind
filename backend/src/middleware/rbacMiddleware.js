@@ -8,3 +8,12 @@ export const rbac = (allowedRoles) => {
     next();
   };
 };
+
+export function requireRole(allowed = []) {
+  return (req, res, next) => {
+    const role = (req.headers['x-user-role'] || '').toLowerCase();
+    if (!role) return res.status(401).json({ error: 'Missing x-user-role header' });
+    if (!allowed.length || allowed.includes(role)) return next();
+    return res.status(403).json({ error: 'Forbidden' });
+  };
+}

@@ -17,3 +17,15 @@ export function audit(action) {
     next();
   };
 }
+
+
+export function audit(actionName) {
+  return (req, res, next) => {
+    const role = req.headers['x-user-role'] || 'unknown';
+    const who = req.headers['x-user-id'] || req.ip;
+    req.audit = { at: new Date().toISOString(), action: actionName, role, who };
+    // You can persist to DB/ELK/etc. For now, log:
+    console.log('[AUDIT]', req.audit, 'payload=', req.body || {});
+    next();
+  };
+}

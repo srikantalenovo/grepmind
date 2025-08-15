@@ -1,27 +1,35 @@
 import { Router } from 'express';
+import { requireRole } from '../middleware/rbacMiddleware.js';
 import { audit } from '../middleware/audit.js';
 import {
-  scanProblems,
-  restartPod,
-  scaleWorkload,
-  applyManifest,
+  listNamespaces,
+  listPods,
+  listDeployments,
+  listServices,
+  problemScan,
+  restartResource,
+  scaleDeployment,
   deleteResource,
-  viewSecret,
-  editYaml
+  getYaml,
+  putYaml
 } from '../controllers/analyzerController.js';
-import { rbac } from '../middleware/rbacMiddleware.js';
 
 const router = Router();
 
-// Read
-router.get('/problems', rbac(['viewer', 'editor', 'admin']), scanProblems);
-router.get('/secrets/:namespace/:name', rbac(['admin']), viewSecret);
+// Read-only (viewer+)
+router.get('/namespaces', requireRole(['viewer','editor','admin']), listNamespaces);
+router.get('/pods',        requireRole(['viewer','editor','admin']), listPods);
+router.get('/deployments', requireRole(['viewer','editor','admin']), listDeployments);
+router.get('/services',    requireRole(['viewer','editor','admin']), listServices);
+router.get('/problems',    requireRole(['viewer','editor','admin']), problemScan);
 
-// Write (editor/admin) + audit
-router.post('/restart', rbac(['editor', 'admin']), audit('restartPod'), restartPod);
-router.post('/scale', rbac(['editor', 'admin']), audit('scaleWorkload'), scaleWorkload);
-router.post('/apply', rbac(['editor', 'admin']), audit('applyManifest'), applyManifest);
-router.delete('/resource', rbac(['admin']), audit('deleteResource'), deleteResource);
-router.put('/edit-yaml', rbac(['admin']), audit('editYaml'), editYaml);
+// Actions (editor+)
+router.post('/restart', requireRole(['editor','admin']), audit('restart'), restartResource);
+router.post('/scale',   requireRole(['editor','admin']), audit('scale'),   scaleDeployment);
+router.delete('/resource', requireRole(['editor','admin']), audit('delete'), deleteResource);
+
+// YAML (editor+ for replace, viewer+ for get)
+router.get('/resource/:type/:namespace/:name/yaml', requireRole(['viewer','editor','admin']), getYaml);
+router.put('/resource/:type/:namespace/:name/yaml', requireRole(['editor','admin']), audit('yaml.replace'), putYaml);
 
 export default router;
