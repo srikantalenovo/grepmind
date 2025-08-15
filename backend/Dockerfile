@@ -29,9 +29,25 @@ ENV NODE_ENV=development
 ENV DB_PORT=5432
 
 # Install required packages, including OpenSSL 1.1
-RUN apt-get update -y && \
-    apt-get install -y wget curl gnupg openssl libssl3 && \
-    rm -rf /var/lib/apt/lists/*
+# RUN apt-get update -y && \
+#     apt-get install -y wget curl gnupg openssl libssl3 && \
+#     rm -rf /var/lib/apt/lists/*
+
+# Install required tools
+RUN apt-get update && apt-get install -y \
+    curl wget \
+    bash \
+    ca-certificates \
+    gnupg openssl libssl3\
+    && rm -rf /var/lib/apt/lists/*
+
+# Install kubectl (latest stable)
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+    && rm kubectl
+
+# Install Helm (latest stable)
+RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
 WORKDIR /app
 

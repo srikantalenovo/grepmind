@@ -14,7 +14,7 @@ import { rbac } from '../middleware/rbacMiddleware.js';
 const router = Router();
 
 // Read
-router.get('/scan', rbac(['viewer', 'editor', 'admin']), scanProblems);
+router.get('/problems', rbac(['viewer', 'editor', 'admin']), scanProblems);
 router.get('/secrets/:namespace/:name', rbac(['admin']), viewSecret);
 
 // Write (editor/admin) + audit
