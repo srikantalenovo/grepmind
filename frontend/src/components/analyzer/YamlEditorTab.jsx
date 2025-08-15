@@ -128,7 +128,8 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
         setLoadingResources(false);
       }
     })();
-  }, [kind, namespace, role, resourceName]);
+  //}, [kind, namespace, role, resourceName]);
+  }, [kind, namespace, role]);
 
     // NEW: Auto-fetch YAML when namespace & resource are set
   useEffect(() => {
