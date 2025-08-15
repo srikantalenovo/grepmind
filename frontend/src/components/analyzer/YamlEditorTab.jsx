@@ -130,6 +130,14 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
     })();
   }, [kind, namespace, role, resourceName]);
 
+    // NEW: Auto-fetch YAML when namespace & resource are set
+  useEffect(() => {
+    if (namespace && resourceName) {
+      fetchYaml();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namespace, resourceName, kind]);
+
   const kindMeta = useMemo(() => KIND_OPTIONS.find(k => k.value === kind), [kind]);
 
   async function fetchYaml() {
