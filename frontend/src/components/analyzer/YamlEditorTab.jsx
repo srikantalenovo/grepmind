@@ -265,6 +265,28 @@ export default function YamlEditorTab({ role = DEFAULT_ROLE }) {
           )}
         </div>
 
+{/* Resource Name Selector */}
+<div className="flex flex-col">
+  <label className="text-sm font-medium mb-1">Resource Name</label>
+  {loadingResources ? (
+    <p className="text-gray-500 text-sm">Loading resources...</p>
+  ) : (
+    <select
+      value={resourceName}
+      onChange={(e) => setResourceName(e.target.value)}
+      className="border rounded-lg px-3 py-2"
+    >
+      <option value="">Select a resource</option>
+      {resources.map((res) => (
+        <option key={res} value={res}>
+          {res}
+        </option>
+      ))}
+    </select>
+  )}
+</div>
+
+
         {/* Resource selector OR manual input */}
         <div className="relative">
           {LISTABLE_KINDS.has(kind) && resources.length > 0 ? (
