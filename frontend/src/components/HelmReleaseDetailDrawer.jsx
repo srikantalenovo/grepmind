@@ -1,56 +1,73 @@
 // src/components/HelmReleaseDetailDrawer.jsx
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { X } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
-async function apiFetch(path, role) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'x-user-role': role },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} - ${await res.text()}`);
-  return res.json();
-}
-
-export default function HelmReleaseDetailDrawer({ role = 'editor', release, onClose }) {
-  const [status, setStatus] = useState(null);
+export default function HelmReleaseDetailDrawer({ release, onClose, role = "editor" }) {
+  const [details, setDetails] = useState(null);
   const [values, setValues] = useState(null);
 
   useEffect(() => {
-    apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/status`, role).then(setStatus).catch(console.error);
-    apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/values`, role).then(setValues).catch(console.error);
+    let mounted = true;
+    (async () => {
+      try {
+        const ns = release.namespace ? `?namespace=${encodeURIComponent(release.namespace)}` : "";
+        const res = await fetch(`${API_BASE}/api/helm/release/${encodeURIComponent(release.name)}${ns}`, {
+          headers: { "x-user-role": role },
+        });
+        const data = await res.json();
+        if (mounted) {
+          setDetails(data?.details || data);
+          setValues(data?.values || data?.valuesYaml || data?.values_yaml || null);
+        }
+      } catch (e) {
+        console.error("helm detail error", e);
+      }
+    })();
+    return () => { mounted = false; };
   }, [release, role]);
 
   return (
-    <div className="fixed inset-0 z-40">
-      <div onClick={onClose} className="absolute inset-0 bg-black/50" />
+    <motion.div className="fixed inset-0 z-50 flex" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="flex-1 bg-black/30" onClick={onClose} />
       <motion.div
-        initial={{ x: '100%' }}
+        className="w-full sm:w-[520px] bg-white shadow-xl p-6 overflow-y-auto"
+        initial={{ x: "100%" }}
         animate={{ x: 0 }}
-        exit={{ x: '100%' }}
-        transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-        className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-white shadow-2xl p-4 overflow-y-auto"
       >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold">Helm • {release.name}</h2>
-          <button
-            onClick={onClose}
-            className="px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
-          >
-            Close
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-indigo-700">Release: {release.name}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <h3 className="font-semibold text-gray-800 mb-2">Status</h3>
-        <pre className="bg-gray-100 p-3 rounded text-xs overflow-auto mb-4">
-          {status ? JSON.stringify(status, null, 2) : 'Loading…'}
-        </pre>
+        <div className="mt-4 space-y-3 text-sm">
+          <div><strong>Namespace:</strong> {release.namespace}</div>
+          <div><strong>Chart:</strong> {release.chart}</div>
+          <div><strong>Status:</strong> {release.status}</div>
+          <div><strong>Revision:</strong> {release.revision}</div>
 
-        <h3 className="font-semibold text-gray-800 mb-2">values.yaml</h3>
-        <pre className="bg-gray-100 p-3 rounded text-xs overflow-auto">
-          {values ? JSON.stringify(values, null, 2) : 'Loading…'}
-        </pre>
+          {details && (
+            <div>
+              <strong>Details:</strong>
+              <pre className="bg-gray-100 p-2 rounded mt-1 overflow-x-auto text-xs">
+                {JSON.stringify(details, null, 2)}
+              </pre>
+            </div>
+          )}
+          {values && (
+            <div>
+              <strong>values.yaml:</strong>
+              <pre className="bg-gray-100 p-2 rounded mt-1 overflow-x-auto text-xs">
+                {typeof values === "string" ? values : JSON.stringify(values, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

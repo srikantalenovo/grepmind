@@ -1,63 +1,63 @@
 // src/components/ScaleModal.jsx
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import { Boxes } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
-const DEFAULT_ROLE = 'editor';
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
-async function apiFetch(path, body, role = DEFAULT_ROLE) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-role': role },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} - ${await res.text()}`);
-  return res.json();
-}
-
-export default function ScaleModal({ item, onClose, onConfirm }) {
-  const [desired, setDesired] = useState(
-    typeof item.details?.desired === 'number' ? item.details.desired :
-    typeof item.details?.available === 'number' ? item.details.available : 1
-  );
+export default function ScaleModal({ item, onClose, onConfirm, role = "editor" }) {
+  const [replicas, setReplicas] = useState(item?.details?.desired ?? item?.details?.available ?? 1);
+  const [loading, setLoading] = useState(false);
 
   async function handleScale() {
-    await apiFetch('/api/analyzer/scale', {
-      namespace: item.namespace,
-      name: item.name,
-      replicas: Number(desired),
-    });
-    onClose();
-    onConfirm();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/analyzer/scale`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-role": role },
+        body: JSON.stringify({ name: item.name, namespace: item.namespace, replicas: Number(replicas) }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      onConfirm?.();
+      onClose();
+    } catch (e) {
+      console.error("Scale failed:", e);
+      alert("Scale failed: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <motion.div
-        initial={{ y: 16, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="relative bg-white rounded-xl p-6 shadow-2xl w-[420px] max-w-[90vw]"
-      >
-        <h2 className="text-lg font-bold mb-2">Scale Deployment</h2>
-        <div className="space-y-2 text-sm text-gray-700">
-          <div><strong>Name:</strong> {item.name}</div>
-          <div><strong>Namespace:</strong> {item.namespace}</div>
-          <div><strong>Current:</strong> {typeof item.details?.desired === 'number' ? item.details.desired : (item.details?.available ?? 'N/A')}</div>
+    <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+        <div className="flex items-center gap-2 text-blue-600">
+          <Boxes className="w-5 h-5" />
+          <h3 className="text-lg font-bold">Scale Deployment</h3>
         </div>
-        <label className="block mt-4 text-sm text-gray-700">Desired replicas</label>
+        <p className="mt-2 text-sm text-gray-600">
+          Set new replica count for <strong>{item.name}</strong> in <strong>{item.namespace}</strong>.
+        </p>
+        <label className="block text-sm mt-4">Replicas</label>
         <input
           type="number"
-          min="0"
-          value={desired}
-          onChange={(e) => setDesired(e.target.value)}
-          className="border rounded px-2 py-1 mt-1 w-full focus:outline-none focus:ring focus:border-indigo-400"
+          min={0}
+          value={replicas}
+          onChange={(e) => setReplicas(e.target.value)}
+          className="border rounded px-3 py-2 mt-1 w-full focus:outline-none focus:ring focus:border-blue-400"
         />
-        <div className="mt-4 flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-1 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
-          <button onClick={handleScale} className="px-4 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">Apply</button>
+        <div className="mt-6 flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+          <button
+            onClick={handleScale}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? "Scaling..." : "Confirm Scale"}
+          </button>
         </div>
-      </motion.div>
-    </div>
+      </div>
+    </motion.div>
   );
 }

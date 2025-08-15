@@ -1,48 +1,54 @@
 // src/components/RestartModal.jsx
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import { AlertTriangle } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
-const DEFAULT_ROLE = 'editor';
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
-async function apiFetch(path, body, role = DEFAULT_ROLE) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-role': role },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} - ${await res.text()}`);
-  return res.json();
-}
+export default function RestartModal({ item, onClose, onConfirm, role = "editor" }) {
+  const [loading, setLoading] = useState(false);
 
-export default function RestartModal({ item, onClose, onConfirm }) {
   async function handleRestart() {
-    await apiFetch('/api/analyzer/restart', {
-      namespace: item.namespace,
-      type: item.type,
-      name: item.name,
-    });
-    onClose();
-    onConfirm();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/analyzer/restart`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-role": role },
+        body: JSON.stringify({ type: item.type, name: item.name, namespace: item.namespace }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      onConfirm?.();
+      onClose();
+    } catch (e) {
+      console.error("Restart failed:", e);
+      alert("Restart failed: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-white rounded-xl p-6 shadow-2xl w-[420px] max-w-[90vw]"
-      >
-        <h2 className="text-lg font-bold mb-2">Confirm Restart</h2>
-        <p className="text-sm text-gray-700">
-          Restart <strong>{item.type}</strong> <em>{item.name}</em> in <code>{item.namespace}</code>?
-        </p>
-        <div className="mt-4 flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-1 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
-          <button onClick={handleRestart} className="px-4 py-1 rounded bg-red-600 text-white hover:bg-red-700">Restart</button>
+    <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertTriangle className="w-5 h-5" />
+          <h3 className="text-lg font-bold">Restart {item.type}</h3>
         </div>
-      </motion.div>
-    </div>
+        <p className="mt-2 text-sm text-gray-600">
+          Are you sure you want to restart <strong>{item.name}</strong> in namespace <strong>{item.namespace}</strong>?
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+          <button
+            onClick={handleRestart}
+            disabled={loading}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+          >
+            {loading ? "Restarting..." : "Confirm Restart"}
+          </button>
+        </div>
+      </div>
+    </motion.div>
   );
 }
