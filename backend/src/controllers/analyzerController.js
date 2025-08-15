@@ -1,4 +1,14 @@
-import { core, apps, k8sYaml } from '../utils/k8sClient.js';
+import { core, apps } from '../utils/k8sClient.js';
+import k8s from "@kubernetes/client-node";
+import yaml from "js-yaml";
+
+// Init Kubernetes client
+const kc = new k8s.KubeConfig();
+kc.loadFromDefault();
+const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+const appsApi = kc.makeApiClient(k8s.AppsV1Api);
+const batchApi = kc.makeApiClient(k8s.BatchV1Api);
+const networkingApi = kc.makeApiClient(k8s.NetworkingV1Api);
 
 // ---------- Helpers ----------
 function getPodIssue(pod) {
@@ -297,55 +307,120 @@ export async function deleteResource(req, res) {
 }
 
 // ---------- YAML get/replace ----------
-export async function getYaml(req, res) {
-  try {
-    const { type, namespace, name } = req.params;
-    const kind = type.toLowerCase();
 
-    if (kind === 'pod') {
-      const r = await core.readNamespacedPod(name, namespace);
-      return res.type('text/yaml').send(k8sYaml.dumpYaml(r.body));
+/**
+ * ✅ List resources by type & namespace
+ */
+export async function listResources(req, res) {
+  const { type, namespace } = req.params;
+  try {
+    let items = [];
+    switch (type) {
+      case "pod":
+        items = (await k8sApi.listNamespacedPod(namespace)).body.items;
+        break;
+      case "service":
+        items = (await k8sApi.listNamespacedService(namespace)).body.items;
+        break;
+      case "deployment":
+        items = (await appsApi.listNamespacedDeployment(namespace)).body.items;
+        break;
+      case "configmap":
+        items = (await k8sApi.listNamespacedConfigMap(namespace)).body.items;
+        break;
+      case "ingress":
+        items = (await networkingApi.listNamespacedIngress(namespace)).body.items;
+        break;
+      case "job":
+        items = (await batchApi.listNamespacedJob(namespace)).body.items;
+        break;
+      default:
+        return res.status(400).json({ error: "Unsupported resource type" });
     }
-    if (kind === 'deployment') {
-      const r = await apps.readNamespacedDeployment(name, namespace);
-      return res.type('text/yaml').send(k8sYaml.dumpYaml(r.body));
-    }
-    if (kind === 'service') {
-      const r = await core.readNamespacedService(name, namespace);
-      return res.type('text/yaml').send(k8sYaml.dumpYaml(r.body));
-    }
-    return res.status(400).json({ error: 'Unsupported type' });
-  } catch (e) {
-    console.error('getYaml error', e);
-    res.status(500).json({ error: e.message });
+    res.json(items.map((r) => r.metadata.name));
+  } catch (err) {
+    console.error(`Error listing ${type}:`, err);
+    res.status(500).json({ error: err.message });
   }
 }
 
-export async function putYaml(req, res) {
+/**
+ * ✅ Get YAML for specific resource
+ */
+export async function getResourceYaml(req, res) {
+  const { type, namespace, name } = req.params;
   try {
-    const { type, namespace, name } = req.params;
-    const { yaml } = req.body || {};
-    if (!yaml) return res.status(400).json({ error: 'yaml is required' });
+    let resource;
+    switch (type) {
+      case "pod":
+        resource = (await k8sApi.readNamespacedPod(name, namespace)).body;
+        break;
+      case "service":
+        resource = (await k8sApi.readNamespacedService(name, namespace)).body;
+        break;
+      case "deployment":
+        resource = (await appsApi.readNamespacedDeployment(name, namespace)).body;
+        break;
+      case "configmap":
+        resource = (await k8sApi.readNamespacedConfigMap(name, namespace)).body;
+        break;
+      case "ingress":
+        resource = (await networkingApi.readNamespacedIngress(name, namespace)).body;
+        break;
+      case "job":
+        resource = (await batchApi.readNamespacedJob(name, namespace)).body;
+        break;
+      default:
+        return res.status(400).json({ error: "Unsupported resource type" });
+    }
 
-    const obj = k8sYaml.loadYaml(yaml);
-    const kind = type.toLowerCase();
+    res.type("text/yaml").send(yaml.dump(resource));
+  } catch (err) {
+    console.error(`Error fetching YAML for ${type}/${name}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+}
 
-    // Replace via put
-    if (kind === 'pod') {
-      const r = await core.replaceNamespacedPod(name, namespace, obj);
-      return res.json({ ok: true, uid: r.body.metadata?.uid });
+/**
+ * ✅ Replace YAML for specific resource
+ */
+export async function replaceResourceYaml(req, res) {
+  const { type, namespace, name } = req.params;
+  const { yaml: yamlContent } = req.body;
+
+  if (!yamlContent) {
+    return res.status(400).json({ error: "YAML content is required" });
+  }
+
+  try {
+    const obj = yaml.load(yamlContent);
+
+    switch (type) {
+      case "pod":
+        await k8sApi.replaceNamespacedPod(name, namespace, obj);
+        break;
+      case "service":
+        await k8sApi.replaceNamespacedService(name, namespace, obj);
+        break;
+      case "deployment":
+        await appsApi.replaceNamespacedDeployment(name, namespace, obj);
+        break;
+      case "configmap":
+        await k8sApi.replaceNamespacedConfigMap(name, namespace, obj);
+        break;
+      case "ingress":
+        await networkingApi.replaceNamespacedIngress(name, namespace, obj);
+        break;
+      case "job":
+        await batchApi.replaceNamespacedJob(name, namespace, obj);
+        break;
+      default:
+        return res.status(400).json({ error: "Unsupported resource type" });
     }
-    if (kind === 'deployment') {
-      const r = await apps.replaceNamespacedDeployment(name, namespace, obj);
-      return res.json({ ok: true, uid: r.body.metadata?.uid });
-    }
-    if (kind === 'service') {
-      const r = await core.replaceNamespacedService(name, namespace, obj);
-      return res.json({ ok: true, uid: r.body.metadata?.uid });
-    }
-    return res.status(400).json({ error: 'Unsupported type' });
-  } catch (e) {
-    console.error('putYaml error', e);
-    res.status(500).json({ error: e.message });
+
+    res.json({ message: "YAML replaced successfully" });
+  } catch (err) {
+    console.error(`Error replacing YAML for ${type}/${name}:`, err);
+    res.status(500).json({ error: err.message });
   }
 }

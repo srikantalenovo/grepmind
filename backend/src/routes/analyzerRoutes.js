@@ -10,14 +10,16 @@ import {
   restartResource,
   scaleDeployment,
   deleteResource,
-  getYaml,
-  putYaml
+  listResources,
+  getResourceYaml,
+  replaceResourceYaml
 } from '../controllers/analyzerController.js';
 
 const router = Router();
 
 // Read-only (viewer+)
 router.get('/namespaces', requireRole(['viewer','editor','admin']), listNamespaces);
+router.get("/resources/:type/:namespace", requireRole(['viewer','editor','admin']), listResources);
 router.get('/pods',        requireRole(['viewer','editor','admin']), listPods);
 router.get('/deployments', requireRole(['viewer','editor','admin']), listDeployments);
 router.get('/services',    requireRole(['viewer','editor','admin']), listServices);
@@ -29,7 +31,7 @@ router.post('/scale',   requireRole(['editor','admin']), audit('scale'),   scale
 router.delete('/resource', requireRole(['editor','admin']), audit('delete'), deleteResource);
 
 // YAML (editor+ for replace, viewer+ for get)
-router.get('/resource/:type/:namespace/:name/yaml', requireRole(['viewer','editor','admin']), getYaml);
-router.put('/resource/:type/:namespace/:name/yaml', requireRole(['editor','admin']), audit('yaml.replace'), putYaml);
+router.get('/resource/:type/:namespace/:name/yaml', requireRole(['viewer','editor','admin']), getResourceYaml);
+router.put('/resource/:type/:namespace/:name/yaml', requireRole(['editor','admin']), audit('yaml.replace'), replaceResourceYaml);
 
 export default router;
