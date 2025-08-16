@@ -44,7 +44,8 @@ async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }) {
   if (search) params.set('search', search);
   params.set('problemsOnly', problemsOnly ? 'true' : 'false');
 
-  const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`);  // ✅ match /api prefix
+  //const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`);  // ✅ match /api prefix 
+  const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`, {}, role);
   return Array.isArray(data?.items) ? data.items : [];  // ✅ unwrap items
 }
 
