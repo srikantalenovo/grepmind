@@ -1,5 +1,6 @@
 // src/components/AnalyzerDetailsDrawer.jsx
 import React, { useEffect, useState } from 'react';
+import YAML from 'yaml';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
@@ -113,7 +114,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
     }
     await apiFetch(`/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: JSON.stringify({ replicas }),
     }, role);
     onActionDone?.();
@@ -121,24 +122,50 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
   };
 
   const doApplyYaml = async () => {
-    // Basic validation: ensure it parses and name/ns/kind match
     try {
-      if (!yamlText || yamlText.trim().length === 0) {
+        if (!yamlText || yamlText.trim().length === 0) {
         alert('YAML is empty');
         return;
-      }
-      // We rely on backend for strict validation & apply
-      await apiFetch(`/api/analyzer/${resource.namespace}/${kind}/${resource.name}/edit`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yaml: yamlText }),
-      }, role);
-      onActionDone?.();
-      onClose();
+        }
+
+        // ✅ Parse and validate kind
+        let obj;
+        try {
+        obj = YAML.parse(yamlText);
+        } catch (err) {
+        alert('Invalid YAML syntax');
+        return;
+        }
+
+        if (!obj.kind) {
+        alert('YAML is missing "kind" field');
+        return;
+        }
+
+        // Ensure YAML kind matches the path kind (plural, lowercase)
+        const yamlKind = obj.kind.toLowerCase() + 's';   // e.g. Deployment -> deployments
+        if (yamlKind !== kind) {
+        alert(`YAML kind (${obj.kind}) does not match path kind (${kind})`);
+        return;
+        }
+
+        // ✅ Send to backend
+        await apiFetch(
+        `/api/analyzer/${resource.namespace}/${kind}/${resource.name}/edit`,
+        {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yaml: yamlText }),
+        },
+        role
+        );
+
+        onActionDone?.();
+        onClose();
     } catch (e) {
-      alert(`Apply failed: ${e.message}`);
-    }
-  };
+        alert(`Apply failed: ${e.message}`);
+ }
+};
 
   const doViewSecret = async () => {
     try {
