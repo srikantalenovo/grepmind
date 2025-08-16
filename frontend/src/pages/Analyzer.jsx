@@ -5,7 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''; // e.g. ''
 
-async function apiFetch(path, opts = {}, role = 'viewer') {
+async function apiFetch(path, opts = {}, role = 'admin') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
