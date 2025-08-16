@@ -5,7 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''; // e.g. ''
 
-async function apiFetch(path, opts = {}, role = 'viewer') {
+async function apiFetch(path, opts = {}, role = 'editor') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
@@ -84,7 +84,7 @@ function rowColor(item) {
 
 export default function Analyzer() {
   const { user } = useContext(AuthContext);
-  const role = user?.role || 'viewer';
+  const role = user?.role || 'editor';
 
   const [namespaces, setNamespaces] = useState(['all']);
   const [namespace, setNamespace] = useState('all');

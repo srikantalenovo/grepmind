@@ -1,7 +1,6 @@
 // src/routes/analyzerRoutes.js
 import express from 'express';
 import { rbac } from '../middleware/rbacMiddleware.js';
-import { scanResources } from '../services/analyzerService.js';
 import {
   analyzerScan,
   restartPod,
@@ -15,7 +14,6 @@ import {
 const router = express.Router();
 
 // Scan endpoint (Viewer+)
-router.get('/scan', rbac(['viewer', 'editor', 'admin']), scanResources);
 router.get('/scan', rbac(['viewer', 'editor', 'admin']), analyzerScan);
 
 // Actions (RBAC)
