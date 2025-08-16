@@ -31,7 +31,7 @@ async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }, r
   if (namespace) params.set('namespace', namespace);
   if (resourceType) params.set('resourceType', resourceType);
   if (search) params.set('search', search);
-  if (problemsOnly) params.set('problemsOnly', 'true');
+  if (problemsOnly) params.set('problemsOnly', 'false'); //canges true to false
   return apiFetch(`/analyzer/scan?${params.toString()}`, {}, role);
 }
 
