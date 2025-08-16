@@ -44,8 +44,8 @@ async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }) {
   if (search) params.set('search', search);
   params.set('problemsOnly', problemsOnly ? 'true' : 'false');
 
-  //const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`);  // ✅ match /api prefix 
-  const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`, {}, role);
+  const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`);  // ✅ match /api prefix 
+  //const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`, {}, role);
   return Array.isArray(data?.items) ? data.items : [];  // ✅ unwrap items
 }
 
@@ -128,8 +128,8 @@ export default function Analyzer() {
     setLoading(true);
     setErrMsg('');
     try {
-      const res = await scanAnalyzer({ namespace, resourceType: type, search, problemsOnly }, role);
-      setData(res.items || []);
+      const res = await scanAnalyzer({ namespace, resourceType: type, search, problemsOnly });
+      setData(res || []);   // ✅ res is already an array
       setLastUpdated(new Date());
     } catch (e) {
       console.error('Analyzer scan failed', e);
@@ -138,6 +138,7 @@ export default function Analyzer() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     load();
