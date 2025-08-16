@@ -26,15 +26,28 @@ async function fetchNamespaces(role) {
   return apiFetch('/api/cluster/namespaces', {}, role);
 }
 
-async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }, role) {
+// async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }, role) {
+//   const params = new URLSearchParams();
+//   if (namespace) params.set('namespace', namespace);
+//   if (resourceType) params.set('resourceType', resourceType);
+//   if (search) params.set('search', search);
+//   params.set('problemsOnly', problemsOnly ? 'true' : 'false');
+//   //if (problemsOnly) params.set('problemsOnly', 'true');
+//   return apiFetch(`/analyzer/scan?${params.toString()}`, {}, role);
+// }
+
+
+async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }) {
   const params = new URLSearchParams();
-  if (namespace) params.set('namespace', namespace);
+  params.set('namespace', namespace ?? 'all');   // ✅ default to "all"
   if (resourceType) params.set('resourceType', resourceType);
   if (search) params.set('search', search);
   params.set('problemsOnly', problemsOnly ? 'true' : 'false');
-  //if (problemsOnly) params.set('problemsOnly', 'true');
-  return apiFetch(`/analyzer/scan?${params.toString()}`, {}, role);
+
+  const data = await apiFetch(`/api/analyzer/scan?${params.toString()}`);  // ✅ match /api prefix
+  return Array.isArray(data?.items) ? data.items : [];  // ✅ unwrap items
 }
+
 
 const RESOURCE_TYPES = [
   { key: 'all', label: 'All Types' },
