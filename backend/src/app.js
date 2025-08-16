@@ -22,7 +22,8 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/cluster', clusterRoutes);
 app.use('/api/resources', resourcesRoutes);
-app.use('/analyzer', analyzerRoutes);  
+app.use('/analyzer', analyzerRoutes);
+app.use('/api/analyzer', analyzerRoutes);  
 
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
