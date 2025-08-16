@@ -113,6 +113,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
     }
     await apiFetch(`/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ replicas }),
     }, role);
     onActionDone?.();
@@ -129,6 +130,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
       // We rely on backend for strict validation & apply
       await apiFetch(`/api/analyzer/${resource.namespace}/${kind}/${resource.name}/edit`, {
         method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ yaml: yamlText }),
       }, role);
       onActionDone?.();
