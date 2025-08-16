@@ -65,7 +65,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
         const [details, yamlRes, evs] = await Promise.all([
           apiFetch(`/api/resources/${resource.namespace}/${apiType}/${resource.name}/details`, {}, role),
           apiFetch(`/api/resources/${resource.namespace}/${apiType}/${resource.name}/yaml`, {}, role),
-          apiFetch(`/api/resources/${resource.namespace}/${apiType}/${resource.name}/events`, {}, role),
+          apiFetch(`/api/resources/${resource.namespace}/${resource.name}/events`, {}, role),
         ]);
         setMeta(details);
         setYamlText(typeof yamlRes === 'string' ? yamlRes : '');
