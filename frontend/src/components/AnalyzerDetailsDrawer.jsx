@@ -111,58 +111,69 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
   const doScale = async () => {
     const replicas = parseInt(scaleDraft, 10);
     if (Number.isNaN(replicas) || replicas < 0) {
-      alert('Please enter a valid non-negative integer for replicas.');
-      return;
+        alert('Please enter a valid non-negative integer for replicas.');
+        return;
     }
-    await apiFetch(`/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, // ✅ fixed
-      body: JSON.stringify({ replicas }),
-    }, role);
-    onActionDone?.();
-    onClose();
-  };
+    
+    try {
+        await apiFetch(
+        `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`, 
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ replicas }),
+        }, 
+        role
+        );
+        onActionDone?.();
+        onClose();
+    } catch (e) {
+        alert(`Failed to scale: ${e.message}`);
+    }
+    };
 
   const doApplyYaml = async () => {
     try {
-      if (!yamlText || yamlText.trim().length === 0) {
+        if (!yamlText || yamlText.trim().length === 0) {
         alert('YAML is empty');
         return;
-      }
+        }
 
-      // Parse YAML to inspect its kind
-      const parsed = YAML.parse(yamlText);
-      const yamlKind = parsed?.kind;
-      if (!yamlKind) {
+        // Parse YAML to inspect its kind
+        const parsed = YAML.parse(yamlText);
+        const yamlKind = parsed?.kind;
+        if (!yamlKind) {
         alert('YAML must include a kind');
         return;
-      }
+        }
 
-      // ✅ Use mapTypeKeys for reliable normalization
-      const { kind: yamlExpectedKind } = mapTypeKeys(yamlKind);
-      const expectedKind = kind; // from props/path
+        // Get the expected kind from the resource (normalized to lowercase)
+        const expectedKind = resource.type.toLowerCase();
 
-      if (yamlExpectedKind !== expectedKind) {
-        alert(`YAML kind (${yamlKind}) does not match path kind (${expectedKind})`);
+        if (yamlKind.toLowerCase() !== expectedKind) {
+        alert(`YAML kind (${yamlKind}) does not match resource kind (${resource.type})`);
         return;
-      }
+        }
 
-      await apiFetch(
-        `/api/analyzer/${resource.namespace}/${expectedKind}/${resource.name}/edit`,
+        // Use the mapped API type for the endpoint
+        const { apiType } = mapTypeKeys(resource.type);
+
+        await apiFetch(
+        `/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/edit`,
         {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ yaml: yamlText }),
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/yaml' }, // Changed to YAML content type
+            body: yamlText, // Send raw YAML
         },
         role
-      );
+        );
 
-      onActionDone?.();
-      onClose();
+        onActionDone?.();
+        onClose();
     } catch (e) {
-      alert(`Apply failed: ${e.message}`);
+        alert(`Apply failed: ${e.message}`);
     }
-  };
+    };
 
   const doViewSecret = async () => {
     try {
