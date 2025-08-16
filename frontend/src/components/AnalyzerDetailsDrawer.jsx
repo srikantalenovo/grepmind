@@ -23,25 +23,62 @@ async function apiFetch(path, opts = {}, role = 'editor') {
 }
 
 // ---------- mapTypeKeys ----------
+// function mapTypeKeys(displayType) {
+//   const t = (displayType || '').toLowerCase();
+//   switch (t) {
+//     case 'pod': return { apiType: 'pods', kind: 'pods' };
+//     case 'deployment': return { apiType: 'deployments', kind: 'deployments' };
+//     case 'statefulset': return { apiType: 'statefulsets', kind: 'statefulsets' };
+//     case 'daemonset': return { apiType: 'daemonsets', kind: 'daemonsets' };
+//     case 'job': return { apiType: 'jobs', kind: 'jobs' };
+//     case 'cronjob': return { apiType: 'cronjobs', kind: 'cronjobs' };
+//     case 'service': return { apiType: 'services', kind: 'services' };
+//     case 'ingress': return { apiType: 'ingresses', kind: 'ingresses' }; // ✅ fixed plural
+//     case 'configmap': return { apiType: 'configmaps', kind: 'configmaps' };
+//     case 'secret': return { apiType: 'secrets', kind: 'secrets' };
+//     case 'persistentvolumeclaim':
+//       return { apiType: 'persistentvolumeclaims', kind: 'persistentvolumeclaims' };
+//     default:
+//       return { apiType: t + 's', kind: t + 's' };
+//   }
+// }
+
+
 function mapTypeKeys(displayType) {
   const t = (displayType || '').toLowerCase();
   switch (t) {
-    case 'pod': return { apiType: 'pods', kind: 'pods' };
-    case 'deployment': return { apiType: 'deployments', kind: 'deployments' };
-    case 'statefulset': return { apiType: 'statefulsets', kind: 'statefulsets' };
-    case 'daemonset': return { apiType: 'daemonsets', kind: 'daemonsets' };
-    case 'job': return { apiType: 'jobs', kind: 'jobs' };
-    case 'cronjob': return { apiType: 'cronjobs', kind: 'cronjobs' };
-    case 'service': return { apiType: 'services', kind: 'services' };
-    case 'ingress': return { apiType: 'ingresses', kind: 'ingresses' }; // ✅ fixed plural
-    case 'configmap': return { apiType: 'configmaps', kind: 'configmaps' };
-    case 'secret': return { apiType: 'secrets', kind: 'secrets' };
+    case 'pod':
+      return { apiType: 'pods', kind: 'Pod' };
+    case 'deployment':
+      return { apiType: 'deployments', kind: 'Deployment' };
+    case 'statefulset':
+      return { apiType: 'statefulsets', kind: 'StatefulSet' };
+    case 'daemonset':
+      return { apiType: 'daemonsets', kind: 'DaemonSet' };
+    case 'job':
+      return { apiType: 'jobs', kind: 'Job' };
+    case 'cronjob':
+      return { apiType: 'cronjobs', kind: 'CronJob' };
+    case 'service':
+      return { apiType: 'services', kind: 'Service' };
+    case 'ingress':
+      return { apiType: 'ingresses', kind: 'Ingress' }; // ✅ fixed
+    case 'configmap':
+      return { apiType: 'configmaps', kind: 'ConfigMap' };
+    case 'secret':
+      return { apiType: 'secrets', kind: 'Secret' };
     case 'persistentvolumeclaim':
-      return { apiType: 'persistentvolumeclaims', kind: 'persistentvolumeclaims' };
+      return { apiType: 'persistentvolumeclaims', kind: 'PersistentVolumeClaim' };
     default:
-      return { apiType: t + 's', kind: t + 's' };
+      // fallback: Capitalize singular + plural lowercase
+      return {
+        apiType: t + 's',
+        kind: t.charAt(0).toUpperCase() + t.slice(1),
+      };
   }
 }
+
+
 
 // ---------- Component ----------
 export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, onActionDone }) {
@@ -116,6 +153,7 @@ const doScale = async () => {
   }
 
   try {
+    // always scale Deployments (plural lowercase for API path)
     await apiFetch(
       `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`,
       {
@@ -125,13 +163,12 @@ const doScale = async () => {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          spec: {
-            replicas: replicas
-          }
+          spec: { replicas }
         })
       },
       role
     );
+
     onActionDone?.();
     onClose();
   } catch (e) {
@@ -147,7 +184,7 @@ const doApplyYaml = async () => {
       return;
     }
 
-    // Parse YAML to inspect its kind
+    // Parse YAML
     const parsed = YAML.parse(yamlText);
     const yamlKind = parsed?.kind;
     if (!yamlKind) {
@@ -155,23 +192,22 @@ const doApplyYaml = async () => {
       return;
     }
 
-    // Get the expected kind from the resource (normalized to lowercase)
-    const expectedKind = resource.type.toLowerCase();
+    // Get correct mapping (plural lowercase for URL, PascalCase for kind)
+    const { apiType, kind } = mapTypeKeys(resource.type);
 
-    if (yamlKind.toLowerCase() !== expectedKind) {
-      alert(`YAML kind (${yamlKind}) does not match resource kind (${resource.type})`);
+    // Validate kind strictly (Deployment vs Deployment, Pod vs Pod, etc.)
+    if (yamlKind !== kind) {
+      alert(`YAML kind (${yamlKind}) does not match resource kind (${kind})`);
       return;
     }
 
-    // Use the mapped API type for the endpoint
-    const { apiType } = mapTypeKeys(resource.type);
-
+    // Call edit endpoint
     await apiFetch(
       `/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/edit`,
       {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }, // Keep as JSON
-        body: JSON.stringify({ yaml: yamlText }), // Send as object with yaml property
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yaml: yamlText })
       },
       role
     );
@@ -182,6 +218,7 @@ const doApplyYaml = async () => {
     alert(`Apply failed: ${e.message}`);
   }
 };
+
 
   const doViewSecret = async () => {
     try {
