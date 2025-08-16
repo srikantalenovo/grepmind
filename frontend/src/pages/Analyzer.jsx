@@ -5,7 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''; // e.g. ''
 
-async function apiFetch(path, opts = {}, role = 'admin') {
+async function apiFetch(path, opts = {}, role = 'viewer') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
@@ -31,7 +31,8 @@ async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }, r
   if (namespace) params.set('namespace', namespace);
   if (resourceType) params.set('resourceType', resourceType);
   if (search) params.set('search', search);
-  if (problemsOnly) params.set('problemsOnly', 'true'); //canges true to false
+  params.set('problemsOnly', problemsOnly ? 'true' : 'false');
+  //if (problemsOnly) params.set('problemsOnly', 'true');
   return apiFetch(`/analyzer/scan?${params.toString()}`, {}, role);
 }
 
@@ -70,7 +71,7 @@ function rowColor(item) {
 
 export default function Analyzer() {
   const { user } = useContext(AuthContext);
-  const role = user?.role || 'admin';
+  const role = user?.role || 'viewer';
 
   const [namespaces, setNamespaces] = useState(['all']);
   const [namespace, setNamespace] = useState('all');

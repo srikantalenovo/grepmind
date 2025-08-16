@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-async function apiFetch(path, opts = {}, role = 'admin') {
+async function apiFetch(path, opts = {}, role = 'viewer') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
