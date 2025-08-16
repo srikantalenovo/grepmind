@@ -90,7 +90,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
 
   const doRestartPod = async () => {
     if (!confirm(`Restart pod ${resource.name}? This deletes the pod to let controller recreate it.`)) return;
-    await apiFetch(`/analyzer/${resource.namespace}/pods/${resource.name}/restart`, { method: 'POST' }, role);
+    await apiFetch(`/api/analyzer/${resource.namespace}/pods/${resource.name}/restart`, { method: 'POST' }, role);
     onActionDone?.();
     onClose();
   };
@@ -98,8 +98,8 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
   const doDelete = async () => {
     if (!confirm(`Delete ${resource.type} ${resource.name}? This cannot be undone.`)) return;
     const path = resource.type === 'Pod'
-      ? `/analyzer/${resource.namespace}/pods/${resource.name}`
-      : `/analyzer/${resource.namespace}/${kind}/${resource.name}`;
+      ? `/api/analyzer/${resource.namespace}/pods/${resource.name}`
+      : `/api/analyzer/${resource.namespace}/${kind}/${resource.name}`;
     await apiFetch(path, { method: 'DELETE' }, role);
     onActionDone?.();
     onClose();
@@ -111,7 +111,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
       alert('Please enter a valid non-negative integer for replicas.');
       return;
     }
-    await apiFetch(`/analyzer/${resource.namespace}/deployments/${resource.name}/scale`, {
+    await apiFetch(`/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`, {
       method: 'POST',
       body: JSON.stringify({ replicas }),
     }, role);
@@ -127,7 +127,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
         return;
       }
       // We rely on backend for strict validation & apply
-      await apiFetch(`/analyzer/${resource.namespace}/${kind}/${resource.name}/edit`, {
+      await apiFetch(`/api/analyzer/${resource.namespace}/${kind}/${resource.name}/edit`, {
         method: 'PUT',
         body: JSON.stringify({ yaml: yamlText }),
       }, role);
@@ -140,7 +140,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
 
   const doViewSecret = async () => {
     try {
-      const sec = await apiFetch(`/analyzer/${resource.namespace}/secrets/${resource.name}/view`, {}, role);
+      const sec = await apiFetch(`/api/analyzer/${resource.namespace}/secrets/${resource.name}/view`, {}, role);
       const pretty = JSON.stringify(sec, null, 2);
       alert(`Secret (decoded):\n\n${pretty}`);
     } catch (e) {
