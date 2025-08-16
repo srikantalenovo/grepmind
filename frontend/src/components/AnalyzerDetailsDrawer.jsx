@@ -1,16 +1,17 @@
 // src/components/AnalyzerDetailsDrawer.jsx
 import React, { useEffect, useState } from 'react';
-import YAML from 'yaml';
+import * as YAML from 'yaml';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+// ---------- apiFetch ----------
 async function apiFetch(path, opts = {}, role = 'editor') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
-      'Content-Type': 'application/json',
       ...(opts.headers || {}),
       'x-user-role': role,
+      ...(!opts.headers?.['Content-Type'] && { 'Content-Type': 'application/json' }),
     },
   });
   if (!res.ok) {
@@ -21,7 +22,7 @@ async function apiFetch(path, opts = {}, role = 'editor') {
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-// Map human type -> resources API type & analyzer kind
+// ---------- mapTypeKeys ----------
 function mapTypeKeys(displayType) {
   const t = (displayType || '').toLowerCase();
   switch (t) {
@@ -32,7 +33,7 @@ function mapTypeKeys(displayType) {
     case 'job': return { apiType: 'jobs', kind: 'jobs' };
     case 'cronjob': return { apiType: 'cronjobs', kind: 'cronjobs' };
     case 'service': return { apiType: 'services', kind: 'services' };
-    case 'ingress': return { apiType: 'ingress', kind: 'ingress' };
+    case 'ingress': return { apiType: 'ingresses', kind: 'ingresses' }; // ✅ fixed plural
     case 'configmap': return { apiType: 'configmaps', kind: 'configmaps' };
     case 'secret': return { apiType: 'secrets', kind: 'secrets' };
     case 'persistentvolumeclaim':
@@ -42,6 +43,7 @@ function mapTypeKeys(displayType) {
   }
 }
 
+// ---------- Component ----------
 export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, onActionDone }) {
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState(null);
@@ -63,7 +65,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
         const [details, yamlRes, evs] = await Promise.all([
           apiFetch(`/api/resources/${resource.namespace}/${apiType}/${resource.name}/details`, {}, role),
           apiFetch(`/api/resources/${resource.namespace}/${apiType}/${resource.name}/yaml`, {}, role),
-          apiFetch(`/api/resources/${resource.namespace}/${resource.name}/events`, {}, role),
+          apiFetch(`/api/resources/${resource.namespace}/${apiType}/${resource.name}/events`, {}, role),
         ]);
         setMeta(details);
         setYamlText(typeof yamlRes === 'string' ? yamlRes : '');
@@ -86,9 +88,9 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
   if (!open || !resource) return null;
 
   const { apiType, kind } = mapTypeKeys(resource.type);
-
   const confirm = (msg) => window.confirm(msg);
 
+  // ---------- Actions ----------
   const doRestartPod = async () => {
     if (!confirm(`Restart pod ${resource.name}? This deletes the pod to let controller recreate it.`)) return;
     await apiFetch(`/api/analyzer/${resource.namespace}/pods/${resource.name}/restart`, { method: 'POST' }, role);
@@ -114,7 +116,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
     }
     await apiFetch(`/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/json' }, // ✅ fixed
       body: JSON.stringify({ replicas }),
     }, role);
     onActionDone?.();
@@ -123,49 +125,44 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
 
   const doApplyYaml = async () => {
     try {
-        if (!yamlText || yamlText.trim().length === 0) {
+      if (!yamlText || yamlText.trim().length === 0) {
         alert('YAML is empty');
         return;
-        }
+      }
 
-        // ✅ Parse and validate kind
-        let obj;
-        try {
-        obj = YAML.parse(yamlText);
-        } catch (err) {
-        alert('Invalid YAML syntax');
+      // Parse YAML to inspect its kind
+      const parsed = YAML.parse(yamlText);
+      const yamlKind = parsed?.kind;
+      if (!yamlKind) {
+        alert('YAML must include a kind');
         return;
-        }
+      }
 
-        if (!obj.kind) {
-        alert('YAML is missing "kind" field');
+      // ✅ Use mapTypeKeys for reliable normalization
+      const { kind: yamlExpectedKind } = mapTypeKeys(yamlKind);
+      const expectedKind = kind; // from props/path
+
+      if (yamlExpectedKind !== expectedKind) {
+        alert(`YAML kind (${yamlKind}) does not match path kind (${expectedKind})`);
         return;
-        }
+      }
 
-        // Ensure YAML kind matches the path kind (plural, lowercase)
-        const yamlKind = obj.kind.toLowerCase() + 's';   // e.g. Deployment -> deployments
-        if (yamlKind !== kind) {
-        alert(`YAML kind (${obj.kind}) does not match path kind (${kind})`);
-        return;
-        }
-
-        // ✅ Send to backend
-        await apiFetch(
-        `/api/analyzer/${resource.namespace}/${kind}/${resource.name}/edit`,
+      await apiFetch(
+        `/api/analyzer/${resource.namespace}/${expectedKind}/${resource.name}/edit`,
         {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ yaml: yamlText }),
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ yaml: yamlText }),
         },
         role
-        );
+      );
 
-        onActionDone?.();
-        onClose();
+      onActionDone?.();
+      onClose();
     } catch (e) {
-        alert(`Apply failed: ${e.message}`);
- }
-};
+      alert(`Apply failed: ${e.message}`);
+    }
+  };
 
   const doViewSecret = async () => {
     try {
@@ -177,6 +174,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
     }
   };
 
+  
   return (
     <div className="fixed inset-0 z-50">
       {/* Backdrop */}
