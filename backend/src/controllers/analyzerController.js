@@ -56,28 +56,32 @@ export const deletePod = async (req, res) => {
   }
 };
 
-// POST /analyzer/:ns/deployments/:name/scale  { replicas } (Editor+)
 export const scaleDeployment = async (req, res) => {
   const { ns, name } = req.params;
-  let { replicas } = req.body || {};
+  let replicas = req.body?.replicas ?? req.body?.spec?.replicas;
+
   try {
     replicas = parseInt(replicas, 10);
     if (Number.isNaN(replicas) || replicas < 0) {
       return res.status(400).json({ error: 'Invalid replicas value' });
     }
-    // Patch deployment replicas
+
     const patch = { spec: { replicas } };
-    await appsV1Api.patchNamespacedDeployment(
+    const resp = await appsV1Api.patchNamespacedDeployment(
       name,
       ns,
       patch,
       undefined, undefined, undefined, undefined,
       { headers: { 'Content-Type': 'application/merge-patch+json' } }
     );
-    res.json({ ok: true, message: `Deployment ${name} scaled to ${replicas}.` });
+
+    res.json({ ok: true, message: `Deployment ${name} scaled to ${replicas}.`, deployment: resp.body });
   } catch (err) {
     console.error(`[ERROR] scaleDeployment ${ns}/${name}:`, err.body?.message || err.message);
-    res.status(500).json({ error: 'Failed to scale deployment', details: err.body?.message || err.message });
+    res.status(500).json({
+      error: 'Failed to scale deployment',
+      details: err.body?.message || err.message
+    });
   }
 };
 
