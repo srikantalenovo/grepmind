@@ -315,29 +315,73 @@ export async function listResources(req, res) {
   const { type, namespace } = req.params;
   try {
     let items = [];
+
     switch (type) {
       case "pod":
-        items = (await k8sApi.listNamespacedPod(namespace)).body.items;
+        items = namespace === "all"
+          ? (await k8sApi.listPodForAllNamespaces()).body.items
+          : (await k8sApi.listNamespacedPod(namespace)).body.items;
         break;
+
       case "service":
-        items = (await k8sApi.listNamespacedService(namespace)).body.items;
+        items = namespace === "all"
+          ? (await k8sApi.listServiceForAllNamespaces()).body.items
+          : (await k8sApi.listNamespacedService(namespace)).body.items;
         break;
+
       case "deployment":
-        items = (await appsApi.listNamespacedDeployment(namespace)).body.items;
+        items = namespace === "all"
+          ? (await appsApi.listDeploymentForAllNamespaces()).body.items
+          : (await appsApi.listNamespacedDeployment(namespace)).body.items;
         break;
+
       case "configmap":
-        items = (await k8sApi.listNamespacedConfigMap(namespace)).body.items;
+        items = namespace === "all"
+          ? (await k8sApi.listConfigMapForAllNamespaces()).body.items
+          : (await k8sApi.listNamespacedConfigMap(namespace)).body.items;
         break;
+
       case "ingress":
-        items = (await networkingApi.listNamespacedIngress(namespace)).body.items;
+        items = namespace === "all"
+          ? (await networkingApi.listIngressForAllNamespaces()).body.items
+          : (await networkingApi.listNamespacedIngress(namespace)).body.items;
         break;
+
       case "job":
-        items = (await batchApi.listNamespacedJob(namespace)).body.items;
+        items = namespace === "all"
+          ? (await batchApi.listJobForAllNamespaces()).body.items
+          : (await batchApi.listNamespacedJob(namespace)).body.items;
         break;
+
+      case "statefulset":
+        items = namespace === "all"
+          ? (await appsApi.listStatefulSetForAllNamespaces()).body.items
+          : (await appsApi.listNamespacedStatefulSet(namespace)).body.items;
+        break;
+
+      case "daemonset":
+        items = namespace === "all"
+          ? (await appsApi.listDaemonSetForAllNamespaces()).body.items
+          : (await appsApi.listNamespacedDaemonSet(namespace)).body.items;
+        break;
+
+      case "cronjob":
+        items = namespace === "all"
+          ? (await batchApi.listCronJobForAllNamespaces()).body.items
+          : (await batchApi.listNamespacedCronJob(namespace)).body.items;
+        break;
+
       default:
         return res.status(400).json({ error: "Unsupported resource type" });
     }
-    res.json(items.map((r) => r.metadata.name));
+
+    // normalize for frontend table
+    res.json(items.map(r => ({
+      namespace: r.metadata?.namespace,
+      name: r.metadata?.name,
+      status: r.status?.phase || r.status?.conditions?.[0]?.type || "Unknown",
+      creation: r.metadata?.creationTimestamp
+    })));
   } catch (err) {
     console.error(`Error listing ${type}:`, err);
     res.status(500).json({ error: err.message });
