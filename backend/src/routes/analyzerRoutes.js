@@ -14,7 +14,7 @@ import {
 const router = express.Router();
 
 // Scan endpoint (Viewer+)
-router.get('/scan', rbac(['viewer', 'editor', 'admin']), analyzerScan);
+router.get('/scan', rbac(['editor', 'admin']), analyzerScan);
 
 // Actions (RBAC)
 router.post('/:ns/pods/:name/restart', rbac(['editor', 'admin']), restartPod);
