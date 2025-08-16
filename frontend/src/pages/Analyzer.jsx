@@ -31,7 +31,7 @@ async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }, r
   if (namespace) params.set('namespace', namespace);
   if (resourceType) params.set('resourceType', resourceType);
   if (search) params.set('search', search);
-  if (problemsOnly) params.set('problemsOnly', 'false'); //canges true to false
+  if (problemsOnly) params.set('problemsOnly', 'true'); //canges true to false
   return apiFetch(`/analyzer/scan?${params.toString()}`, {}, role);
 }
 
@@ -70,7 +70,7 @@ function rowColor(item) {
 
 export default function Analyzer() {
   const { user } = useContext(AuthContext);
-  const role = user?.role || 'viewer';
+  const role = user?.role || 'admin';
 
   const [namespaces, setNamespaces] = useState(['all']);
   const [namespace, setNamespace] = useState('all');
