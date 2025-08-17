@@ -60,11 +60,17 @@ export const scaleDeployment = async (req, res) => {
   const { ns, name } = req.params;
   let replicas = req.body?.replicas ?? req.body?.spec?.replicas;
 
+  if (!ns) {
+    return res.status(400).json({ error: 'Namespace is required in the path' });
+  }
+
   try {
     replicas = parseInt(replicas, 10);
     if (Number.isNaN(replicas) || replicas < 0) {
       return res.status(400).json({ error: 'Invalid replicas value' });
     }
+
+    console.log(`Scaling deployment ${ns}/${name} to ${replicas} replicas`);
 
     const patch = { spec: { replicas } };
     const resp = await appsV1Api.patchNamespacedDeployment(
@@ -75,7 +81,11 @@ export const scaleDeployment = async (req, res) => {
       { headers: { 'Content-Type': 'application/merge-patch+json' } }
     );
 
-    res.json({ ok: true, message: `Deployment ${name} scaled to ${replicas}.`, deployment: resp.body });
+    res.json({
+      ok: true,
+      message: `Deployment ${name} scaled to ${replicas}.`,
+      deployment: resp.body
+    });
   } catch (err) {
     console.error(`[ERROR] scaleDeployment ${ns}/${name}:`, err.body?.message || err.message);
     res.status(500).json({
@@ -84,6 +94,7 @@ export const scaleDeployment = async (req, res) => {
     });
   }
 };
+
 
 // DELETE /analyzer/:ns/:kind/:name  (Admin)
 export const deleteResource = async (req, res) => {
