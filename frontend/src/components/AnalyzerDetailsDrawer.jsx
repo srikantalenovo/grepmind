@@ -1,6 +1,6 @@
 // src/components/AnalyzerDetailsDrawer.jsx
 import React, { useEffect, useState } from 'react';
-import * as YAML from 'yaml';
+import YAML from 'yaml';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
