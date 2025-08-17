@@ -304,49 +304,56 @@ export const getAnalyzerEvents = async (req, res) => {
 
 
 // ---------- SCALE ----------
-export const scaleResource = async (req, res) => {
-  const { namespace, resourceType, name } = req.params;
-  const rt = (resourceType || '').toLowerCase();
-
+export async function scaleResource(req, res) {
   try {
-    const replicasRaw = req.body?.replicas ?? req.body?.spec?.replicas;
-    const replicas = Number.parseInt(replicasRaw, 10);
-    if (!Number.isFinite(replicas) || replicas < 0) {
-      return res.status(400).json({ error: 'Invalid replicas value' });
+    const { namespace, kind, name } = req.params;
+    const { replicas } = req.body;
+
+    if (replicas === undefined || isNaN(parseInt(replicas, 10))) {
+      return res.status(400).json({ error: "Invalid replicas value" });
     }
 
-    if (rt !== 'deployments') {
-      return res.status(400).json({ error: `Scaling not supported for resourceType: ${resourceType}` });
+    const patch = { spec: { replicas: parseInt(replicas, 10) } };
+
+    // very important: use merge-patch+json
+    const options = { headers: { 'Content-Type': 'application/merge-patch+json' } };
+
+    let result;
+    if (kind.toLowerCase() === 'deployments') {
+      result = await appsV1Api.patchNamespacedDeployment(
+        name,
+        namespace,
+        patch,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        options
+      );
+    } else if (kind.toLowerCase() === 'statefulsets') {
+      result = await appsV1Api.patchNamespacedStatefulSet(
+        name,
+        namespace,
+        patch,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        options
+      );
+    } else {
+      return res.status(400).json({ error: `Scaling not supported for kind: ${kind}` });
     }
 
-    // Strategic merge patch works well for replicas
-    const patch = { spec: { replicas } };
-
-    const resp = await appsV1Api.patchNamespacedDeployment(
-      name,
-      namespace,
-      patch,
-      undefined, // pretty
-      undefined, // dryRun
-      undefined, // fieldManager
-      undefined, // fieldValidation
-      { headers: { 'content-type': 'application/strategic-merge-patch+json' } }
-    );
-
-    return res.json({
-      ok: true,
-      message: `Deployment ${name} scaled to ${replicas}.`,
-      deployment: resp.body,
-    });
+    res.json({ success: true, result: result.body });
   } catch (err) {
-    console.error('[ERROR] scaleResource:', err.body?.message || err.message);
-    return res.status(500).json({
-      error: 'Failed to scale deployment',
-      details: err.body?.message || err.message,
+    console.error("[ERROR] scaleResource:", err.body || err.message);
+    res.status(500).json({
+      error: "Failed to scale deployment",
+      details: err.body?.message || err.message
     });
   }
-};
-
+}
 // ---------- EDIT YAML ----------
 export const editYaml = async (req, res) => {
   const { namespace, resourceType, name } = req.params;
