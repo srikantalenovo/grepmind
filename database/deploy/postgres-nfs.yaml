@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: grepmind-db-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteMany
+  mountOptions:
+    - nfsvers=4.1
+  nfs:
+    server: 10.0.0.20 #NGE to your NFS server IP
+    path: /srv/nfs/kubedata/db
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grepmind-db-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  volumeName: grepmind-db-pv
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grepmind-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grepmind-db
+  template:
+    metadata:
+      labels:
+        app: grepmind-db
+    spec:
+      containers:
+        - name: postgres
+          image: srikanta1219/grepmind-db:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: postgres
+            - name: POSTGRES_DB
+              value: grepmind
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: grepmind-db-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grepmind-db
+spec:
+  selector:
+    app: grepmind-db
+  ports:
+    - port: 5432
+      targetPort: 5432

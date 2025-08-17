@@ -1,0 +1,101 @@
+# 1️⃣ ServiceAccount for backend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grepmind-sa
+  namespace: grepmind
+---
+# grepmind-admin-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grepmind-admin-role
+rules:
+  - apiGroups: [""] # Core API group
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grepmind-admin-binding
+subjects:
+  - kind: ServiceAccount
+    name: grepmind-sa
+    namespace: grepmind
+roleRef:
+  kind: ClusterRole
+  name: grepmind-admin-role
+  apiGroup: rbac.authorization.k8s.io
+
+
+
+---
+# 3️⃣ Backend Deployment using grepmind-sa
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grepmind-backend
+  namespace: grepmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grepmind-backend
+  template:
+    metadata:
+      labels:
+        app: grepmind-backend
+    spec:
+      serviceAccountName: grepmind-sa   # ✅ Use our admin SA
+      automountServiceAccountToken: true
+      containers:
+        - name: backend
+          image: srikanta1219/grepmind-backend:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DB_HOST
+              value: postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: grepmind
+            - name: DB_USER
+              value: postgres
+            - name: DB_PASSWORD
+              value: postgres
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              value: postgresql://postgres:postgres@grepmind-db:5432/grepmind?schema=public
+            - name: FRONTEND_URL
+              value: http://grepmind.sritechhub.com
+            - name: BACKEND_URL
+              value: http://grepmind.sritechhub.com
+            - name: JWT_SECRET
+              value: d211f689bfda98fe5dd3146713e021f20cf380ca6581e05c93a3f6d68920033ed957bf22fc59799a9e40d17b15e994e3462868a6e1fb379dd5804a7079746189
+            - name: JWT_REFRESH_SECRET
+              value: 3e3e147c55cac2bcdc2ede23f8715044fc34db60f0b4f8aa490128601780069c37514f5ddc11d4e7a3d2b9a736fc22814de10a9a97672c5caf5af5f662c7a2d0
+            - name: ACCESS_TOKEN_SECRET
+              value: d211f689bfda98fe5dd3146713e021f20cf380ca6581e05c93a3f6d68920033ed957bf22fc59799a9e40d17b15e994e3462868a6e1fb379dd5804a7079746189
+            - name: REFRESH_TOKEN_SECRET
+              value: 3e3e147c55cac2bcdc2ede23f8715044fc34db60f0b4f8aa490128601780069c37514f5ddc11d4e7a3d2b9a736fc22814de10a9a97672c5caf5af5f662c7a2d0                           
+
+---
+# 4️⃣ Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grepmind-backend
+  namespace: grepmind
+spec:
+  selector:
+    app: grepmind-backend
+  ports:
+    - port: 5000
+      targetPort: 5000

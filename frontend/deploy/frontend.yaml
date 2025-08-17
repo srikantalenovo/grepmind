@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grepmind-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grepmind-frontend
+  template:
+    metadata:
+      labels:
+        app: grepmind-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: srikanta1219/grepmind-frontend:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            - name: REACT_APP_API_URL
+              value: "http://grepmind.sritechhub.com"
+            - name: VITE_API_URL
+              value: "http://grepmind.sritechhub.com"
+            - name: FRONTEND_URL
+              value: "http://grepmind.sritechhub.com"                            
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grepmind-frontend
+spec:
+  selector:
+    app: grepmind-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: NodePort # Or LoadBalancer if in cloud
