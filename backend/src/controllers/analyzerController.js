@@ -117,7 +117,7 @@ export const scaleDeployment = async (req, res) => {
 
   try {
     const body = {
-      apiVersion: 'apps/v1',
+      apiVersion: 'autoscaling/v1',
       kind: 'Scale',
       metadata: { name, namespace },
       spec: { replicas },
@@ -432,5 +432,66 @@ export const getAnalyzerEvents = async (req, res) => {
   } catch (err) {
     console.error(`[ERROR] Analyzer getEvents ${name}:`, err.message);
     res.status(500).json({ error: `Failed to fetch events: ${err.message}` });
+  }
+};
+
+
+
+export const scaleResource = async (req, res) => {
+  const { namespace, kind, name } = req.params;
+  const { replicas } = req.body || {};
+
+  if (typeof replicas !== 'number' || replicas < 0) {
+    return res.status(400).json({ error: 'Invalid replicas value' });
+  }
+
+  try {
+    // Correct Scale object (must use autoscaling/v1)
+    const body = {
+      apiVersion: 'autoscaling/v1',
+      kind: 'Scale',
+      metadata: { name, namespace },
+      spec: { replicas },
+    };
+
+    const kindLower = kind.toLowerCase();
+    let result;
+
+    switch (kindLower) {
+      case 'deployment':
+      case 'deployments':
+        result = await appsV1Api.replaceNamespacedDeploymentScale(name, namespace, body);
+        break;
+
+      case 'statefulset':
+      case 'statefulsets':
+        result = await appsV1Api.replaceNamespacedStatefulSetScale(name, namespace, body);
+        break;
+
+      case 'replicaset':
+      case 'replicasets':
+        result = await appsV1Api.replaceNamespacedReplicaSetScale(name, namespace, body);
+        break;
+
+      case 'daemonset':
+      case 'daemonsets':
+        return res.status(400).json({
+          error: 'DaemonSets cannot be scaled via replicas (they run one pod per node).',
+        });
+
+      default:
+        return res.status(400).json({ error: `Scaling not supported for kind: ${kind}` });
+    }
+
+    res.json(result.body);
+  } catch (err) {
+    console.error(
+      `[ERROR] scaleResource ${namespace}/${kind}/${name}:`,
+      err.body?.message || err.message
+    );
+    res.status(500).json({
+      error: `Failed to scale ${kind}`,
+      details: err.body?.message || err.message,
+    });
   }
 };

@@ -147,7 +147,7 @@ const doScale = async () => {
   }
   try {
     await apiFetch(
-      `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`,
+      `/api/analyzer/${resource.namespace}/${resource.kind.toLowerCase()}s/${resource.name}/scale`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
