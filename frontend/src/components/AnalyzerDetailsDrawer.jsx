@@ -120,7 +120,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
 
   // --- Scale (Deployments only)
   const doScale = async () => {
-    const replicas = Number.parseInt(scaleDraft, 10);
+    const replicas = parseInt(scaleDraft, 10);
     if (!Number.isFinite(replicas) || replicas < 0) {
       alert('Please enter a valid non-negative integer for replicas.');
       return;

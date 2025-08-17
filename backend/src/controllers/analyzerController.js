@@ -445,3 +445,43 @@ export const editYaml = async (req, res) => {
     });
   }
 };
+
+
+export const scaleDeployment = async (req, res) => {
+  try {
+    const { namespace, name } = req.params;
+    const { replicas } = req.body;
+
+    if (replicas == null || isNaN(replicas)) {
+      return res.status(400).json({ error: 'Invalid replicas value' });
+    }
+
+    const patch = { spec: { replicas: parseInt(replicas, 10) } };
+
+    const options = {
+      headers: { 'Content-Type': 'application/merge-patch+json' },
+    };
+
+    const resp = await appsV1Api.patchNamespacedDeployment(
+      name,
+      namespace,
+      patch,
+      undefined, // pretty
+      undefined, // dryRun
+      undefined, // fieldManager
+      undefined, // fieldValidation
+      options
+    );
+
+    res.json({
+      success: true,
+      scaled: resp.body.spec?.replicas,
+    });
+  } catch (err) {
+    console.error('[ERROR] scaleDeployment:', err.response?.body || err.message);
+    res.status(500).json({
+      error: 'Failed to scale deployment',
+      details: err.response?.body?.message || err.message,
+    });
+  }
+};

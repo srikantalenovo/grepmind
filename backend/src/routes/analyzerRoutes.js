@@ -10,6 +10,7 @@ import {
   scaleResource,
   deleteResource,
   viewSecret,
+  scaleDeployment,
   editYaml
 } from '../controllers/analyzerController.js';
 
@@ -28,6 +29,7 @@ router.post('/:namespace/pods/:name/restart', rbac(['editor', 'admin']), restart
 router.delete('/:namespace/pods/:name', rbac(['admin']), deletePod);
 
 router.post('/:namespace/:resourceType/:name/scale', rbac(['editor', 'admin']), scaleResource);
+router.post('/:namespace/deployments/:name/scale', rbac(['editor', 'admin']), scaleDeployment);
 
 // Generic delete (use resourceType, not kind)
 router.delete('/:namespace/:resourceType/:name', rbac(['admin']), deleteResource);
