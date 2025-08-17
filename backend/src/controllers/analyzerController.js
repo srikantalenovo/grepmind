@@ -107,34 +107,34 @@ export const deletePod = async (req, res) => {
 // };
 
 
-export const scaleDeployment = async (req, res) => {
-  const { namespace, name } = req.params;
-  const { replicas } = req.body || {};
+// export const scaleDeployment = async (req, res) => {
+//   const { namespace, name } = req.params;
+//   const { replicas } = req.body || {};
 
-  if (typeof replicas !== 'number' || replicas < 0) {
-    return res.status(400).json({ error: 'Invalid replicas value' });
-  }
+//   if (typeof replicas !== 'number' || replicas < 0) {
+//     return res.status(400).json({ error: 'Invalid replicas value' });
+//   }
 
-  try {
-    const body = {
-      apiVersion: 'autoscaling/v1',
-      kind: 'Scale',
-      metadata: { name, namespace },
-      spec: { replicas },
-    };
+//   try {
+//     const body = {
+//       apiVersion: 'autoscaling/v1',
+//       kind: 'Scale',
+//       metadata: { name, namespace },
+//       spec: { replicas },
+//     };
 
-    const result = await appsV1Api.replaceNamespacedDeploymentScale(
-      name,
-      namespace,
-      body
-    );
+//     const result = await appsV1Api.replaceNamespacedDeploymentScale(
+//       name,
+//       namespace,
+//       body
+//     );
 
-    res.json(result.body);
-  } catch (err) {
-    console.error(`[ERROR] scaleDeployment ${namespace}/${name}:`, err.body?.message || err.message);
-    res.status(500).json({ error: 'Failed to scale deployment', details: err.body?.message || err.message });
-  }
-};
+//     res.json(result.body);
+//   } catch (err) {
+//     console.error(`[ERROR] scaleDeployment ${namespace}/${name}:`, err.body?.message || err.message);
+//     res.status(500).json({ error: 'Failed to scale deployment', details: err.body?.message || err.message });
+//   }
+// };
 
 // DELETE /analyzer/:namespace/:kind/:name  (Admin)
 export const deleteResource = async (req, res) => {
