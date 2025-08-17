@@ -1,5 +1,4 @@
 // src/controllers/analyzerController.js
-import yaml from 'js-yaml';
 import YAML from 'yaml';
 import {
   coreV1Api,
