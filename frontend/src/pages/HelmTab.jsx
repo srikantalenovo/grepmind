@@ -142,7 +142,7 @@ export default function HelmTab() {
           release={selectedRelease}
           onClose={() => setSelectedRelease(null)}
           onActionDone={loadReleases}
-          role={userRole}
+          role={role}
         />
       )}
     </div>
