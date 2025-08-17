@@ -8,24 +8,21 @@ import {
 } from '../config/k8sClient.js';
 import { scanResources } from '../services/analyzerService.js';
 
-// helper: plural resourceType in URL -> singular kind
-const toSingularKind = (rt = '') => {
-  const k = String(rt).toLowerCase();
-  const map = {
-    pods: 'pod',
-    services: 'service',
-    configmaps: 'configmap',
-    secrets: 'secret',
-    persistentvolumeclaims: 'persistentvolumeclaim',
-    deployments: 'deployment',
-    statefulsets: 'statefulset',
-    daemonsets: 'daemonset',
-    jobs: 'job',
-    cronjobs: 'cronjob',
-    ingresses: 'ingress',
-  };
-  return map[k] || k.replace(/s$/, '');
+// Map plural resource to PascalCase kind
+const RESOURCE_TO_KIND = {
+  pods: 'Pod',
+  services: 'Service',
+  configmaps: 'ConfigMap',
+  secrets: 'Secret',
+  persistentvolumeclaims: 'PersistentVolumeClaim',
+  deployments: 'Deployment',
+  statefulsets: 'StatefulSet',
+  daemonsets: 'DaemonSet',
+  jobs: 'Job',
+  cronjobs: 'CronJob',
+  ingresses: 'Ingress',
 };
+
 
 // ---------- SCAN ----------
 export const analyzerScan = async (req, res) => {
@@ -74,67 +71,6 @@ export const deletePod = async (req, res) => {
     res.status(500).json({ error: 'Failed to delete pod', details: err.body?.message || err.message });
   }
 };
-
-// POST /analyzer/:namespace/deployments/:name/scale
-// export const scaleDeployment = async (req, res) => {
-//   try {
-//     const { namespace, name } = req.params;
-//     let { replicas } = req.body || {};
-//     replicas = Number(replicas);
-//     if (!Number.isInteger(replicas) || replicas < 0) {
-//       return res.status(400).json({ error: 'Invalid replicas value' });
-//     }
-
-//     const patch = { spec: { replicas } };
-
-//     // Use JSON Merge Patch to avoid 415
-//     const resp = await appsV1Api.patchNamespacedDeployment(
-//       name,
-//       namespace,
-//       patch,
-//       undefined, undefined, undefined, undefined,
-//       { headers: { 'Content-Type': 'application/merge-patch+json' } }
-//     );
-
-//     res.json({ ok: true, replicas: resp.body?.spec?.replicas ?? replicas });
-//   } catch (err) {
-//     console.error('[ERROR] scaleDeployment:', err.body?.message || err.message);
-//     res.status(500).json({
-//       error: 'Failed to scale deployment',
-//       details: err.body?.message || err.message,
-//     });
-//   }
-// };
-
-
-// export const scaleDeployment = async (req, res) => {
-//   const { namespace, name } = req.params;
-//   const { replicas } = req.body || {};
-
-//   if (typeof replicas !== 'number' || replicas < 0) {
-//     return res.status(400).json({ error: 'Invalid replicas value' });
-//   }
-
-//   try {
-//     const body = {
-//       apiVersion: 'autoscaling/v1',
-//       kind: 'Scale',
-//       metadata: { name, namespace },
-//       spec: { replicas },
-//     };
-
-//     const result = await appsV1Api.replaceNamespacedDeploymentScale(
-//       name,
-//       namespace,
-//       body
-//     );
-
-//     res.json(result.body);
-//   } catch (err) {
-//     console.error(`[ERROR] scaleDeployment ${namespace}/${name}:`, err.body?.message || err.message);
-//     res.status(500).json({ error: 'Failed to scale deployment', details: err.body?.message || err.message });
-//   }
-// };
 
 // DELETE /analyzer/:namespace/:kind/:name  (Admin)
 export const deleteResource = async (req, res) => {
@@ -218,76 +154,6 @@ export const viewSecret = async (req, res) => {
   } catch (err) {
     console.error(`[ERROR] viewSecret ${namespace}/${name}:`, err.body?.message || err.message);
     res.status(500).json({ error: 'Failed to view secret', details: err.body?.message || err.message });
-  }
-};
-
-// PUT /analyzer/:namespace/:resourceType/:name/edit  { yaml }
-export const editYaml = async (req, res) => {
-  const { namespace, resourceType, name } = req.params;
-  const { yaml: yamlText } = req.body || {};
-  try {
-    if (!yamlText || typeof yamlText !== 'string') {
-      return res.status(400).json({ error: 'yaml is required in body' });
-    }
-
-    const obj = yaml.load(yamlText); // <— use `yaml.load` here
-    if (!obj || typeof obj !== 'object') {
-      return res.status(400).json({ error: 'Invalid YAML content' });
-    }
-    if (!obj.kind || !obj.metadata?.name) {
-      return res.status(400).json({ error: 'YAML must include kind and metadata.name' });
-    }
-
-    // Validate name/namespace
-    if (obj.metadata.name !== name) {
-      return res.status(400).json({ error: `YAML name (${obj.metadata.name}) does not match path param (${name})` });
-    }
-    // default YAML namespace if omitted
-    if (!obj.metadata.namespace) obj.metadata.namespace = namespace;
-    if (obj.metadata.namespace !== namespace) {
-      return res.status(400).json({ error: `YAML namespace (${obj.metadata.namespace}) does not match path param (${namespace})` });
-    }
-
-    // Validate kind against path resourceType
-    const yamlKindLower = String(obj.kind).toLowerCase();
-    const expectedKindLower = toSingularKind(resourceType);
-    if (yamlKindLower !== expectedKindLower) {
-      return res.status(400).json({ error: `YAML kind (${obj.kind}) does not match path kind (${resourceType})` });
-    }
-
-    // Replace full object by kind
-    let result;
-    switch (yamlKindLower) {
-      case 'pod':
-        result = await coreV1Api.replaceNamespacedPod(name, namespace, obj); break;
-      case 'service':
-        result = await coreV1Api.replaceNamespacedService(name, namespace, obj); break;
-      case 'configmap':
-        result = await coreV1Api.replaceNamespacedConfigMap(name, namespace, obj); break;
-      case 'secret':
-        result = await coreV1Api.replaceNamespacedSecret(name, namespace, obj); break;
-      case 'persistentvolumeclaim':
-        result = await coreV1Api.replaceNamespacedPersistentVolumeClaim(name, namespace, obj); break;
-      case 'deployment':
-        result = await appsV1Api.replaceNamespacedDeployment(name, namespace, obj); break;
-      case 'statefulset':
-        result = await appsV1Api.replaceNamespacedStatefulSet(name, namespace, obj); break;
-      case 'daemonset':
-        result = await appsV1Api.replaceNamespacedDaemonSet(name, namespace, obj); break;
-      case 'job':
-        result = await batchV1Api.replaceNamespacedJob(name, namespace, obj); break;
-      case 'cronjob':
-        result = await batchV1Api.replaceNamespacedCronJob(name, namespace, obj); break;
-      case 'ingress':
-        result = await networkingV1Api.replaceNamespacedIngress(name, namespace, obj); break;
-      default:
-        return res.status(400).json({ error: `Unsupported kind for edit: ${obj.kind}` });
-    }
-
-    res.json({ ok: true, message: `${obj.kind} ${name} updated`, resource: result.body });
-  } catch (err) {
-    console.error(`[ERROR] editYaml ${namespace}/${resourceType}/${name}:`, err.body?.message || err.message);
-    res.status(500).json({ error: 'Failed to apply YAML', details: err.body?.message || err.message });
   }
 };
 
@@ -437,60 +303,144 @@ export const getAnalyzerEvents = async (req, res) => {
 
 
 
+// ---------- SCALE ----------
 export const scaleResource = async (req, res) => {
-  const { namespace, kind, name } = req.params;
-  const { replicas } = req.body || {};
+  const { namespace, resourceType, name } = req.params;
+  const rt = (resourceType || '').toLowerCase();
 
-  if (typeof replicas !== 'number' || replicas < 0) {
-    return res.status(400).json({ error: 'Invalid replicas value' });
+  try {
+    const replicasRaw = req.body?.replicas ?? req.body?.spec?.replicas;
+    const replicas = Number.parseInt(replicasRaw, 10);
+    if (!Number.isFinite(replicas) || replicas < 0) {
+      return res.status(400).json({ error: 'Invalid replicas value' });
+    }
+
+    if (rt !== 'deployments') {
+      return res.status(400).json({ error: `Scaling not supported for resourceType: ${resourceType}` });
+    }
+
+    // Strategic merge patch works well for replicas
+    const patch = { spec: { replicas } };
+
+    const resp = await appsV1Api.patchNamespacedDeployment(
+      name,
+      namespace,
+      patch,
+      undefined, // pretty
+      undefined, // dryRun
+      undefined, // fieldManager
+      undefined, // fieldValidation
+      { headers: { 'content-type': 'application/strategic-merge-patch+json' } }
+    );
+
+    return res.json({
+      ok: true,
+      message: `Deployment ${name} scaled to ${replicas}.`,
+      deployment: resp.body,
+    });
+  } catch (err) {
+    console.error('[ERROR] scaleResource:', err.body?.message || err.message);
+    return res.status(500).json({
+      error: 'Failed to scale deployment',
+      details: err.body?.message || err.message,
+    });
+  }
+};
+
+// ---------- EDIT YAML ----------
+export const editYaml = async (req, res) => {
+  const { namespace, resourceType, name } = req.params;
+  const rt = (resourceType || '').toLowerCase();
+  const yamlText = req.body?.yaml;
+
+  if (!yamlText || typeof yamlText !== 'string') {
+    return res.status(400).json({ error: 'YAML is required in body' });
   }
 
   try {
-    // Correct Scale object (must use autoscaling/v1)
-    const body = {
-      apiVersion: 'autoscaling/v1',
-      kind: 'Scale',
-      metadata: { name, namespace },
-      spec: { replicas },
-    };
+    const obj = yaml.load(yamlText);
+    if (!obj || typeof obj !== 'object') {
+      return res.status(400).json({ error: 'Invalid YAML content' });
+    }
+    const yamlKind = obj?.kind;
+    const yamlName = obj?.metadata?.name;
+    const yamlNs = obj?.metadata?.namespace ?? namespace;
 
-    const kindLower = kind.toLowerCase();
-    let result;
+    if (!yamlKind) return res.status(400).json({ error: 'YAML must include kind' });
+    if (!yamlName) return res.status(400).json({ error: 'YAML must include metadata.name' });
 
-    switch (kindLower) {
-      case 'deployment':
-      case 'deployments':
-        result = await appsV1Api.replaceNamespacedDeploymentScale(name, namespace, body);
-        break;
-
-      case 'statefulset':
-      case 'statefulsets':
-        result = await appsV1Api.replaceNamespacedStatefulSetScale(name, namespace, body);
-        break;
-
-      case 'replicaset':
-      case 'replicasets':
-        result = await appsV1Api.replaceNamespacedReplicaSetScale(name, namespace, body);
-        break;
-
-      case 'daemonset':
-      case 'daemonsets':
-        return res.status(400).json({
-          error: 'DaemonSets cannot be scaled via replicas (they run one pod per node).',
-        });
-
-      default:
-        return res.status(400).json({ error: `Scaling not supported for kind: ${kind}` });
+    // Validate name + namespace
+    if (yamlName !== name) {
+      return res.status(400).json({
+        error: `YAML name (${yamlName}) does not match path param (${name})`,
+      });
+    }
+    if (yamlNs !== namespace) {
+      return res.status(400).json({
+        error: `YAML namespace (${yamlNs}) does not match path param (${namespace})`,
+      });
     }
 
-    res.json(result.body);
+    // Validate kind matches resourceType
+    const expectedKind = RESOURCE_TO_KIND[rt];
+    if (!expectedKind) {
+      return res.status(400).json({ error: `Unsupported resourceType: ${resourceType}` });
+    }
+    if (yamlKind !== expectedKind) {
+      return res.status(400).json({
+        error: `YAML kind (${yamlKind}) does not match path kind (${resourceType})`,
+      });
+    }
+
+    // Apply (replace full resource)
+    let result;
+    switch (rt) {
+      case 'pods':
+        result = await coreV1Api.replaceNamespacedPod(name, namespace, obj);
+        break;
+      case 'services':
+        result = await coreV1Api.replaceNamespacedService(name, namespace, obj);
+        break;
+      case 'configmaps':
+        result = await coreV1Api.replaceNamespacedConfigMap(name, namespace, obj);
+        break;
+      case 'secrets':
+        result = await coreV1Api.replaceNamespacedSecret(name, namespace, obj);
+        break;
+      case 'persistentvolumeclaims':
+        result = await coreV1Api.replaceNamespacedPersistentVolumeClaim(name, namespace, obj);
+        break;
+      case 'deployments':
+        result = await appsV1Api.replaceNamespacedDeployment(name, namespace, obj);
+        break;
+      case 'statefulsets':
+        result = await appsV1Api.replaceNamespacedStatefulSet(name, namespace, obj);
+        break;
+      case 'daemonsets':
+        result = await appsV1Api.replaceNamespacedDaemonSet(name, namespace, obj);
+        break;
+      case 'jobs':
+        result = await batchV1Api.replaceNamespacedJob(name, namespace, obj);
+        break;
+      case 'cronjobs':
+        result = await batchV1Api.replaceNamespacedCronJob(name, namespace, obj);
+        break;
+      case 'ingresses':
+        result = await networkingV1Api.replaceNamespacedIngress(name, namespace, obj);
+        break;
+      default:
+        return res.status(400).json({ error: `Unsupported resourceType: ${resourceType}` });
+    }
+
+    return res.json({
+      ok: true,
+      message: `${yamlKind} ${name} updated`,
+      resource: result.body,
+    });
   } catch (err) {
-    console.error(
-      `[ERROR] scaleResource ${namespace}/${kind}/${name}:`,
-      err.body?.message || err.message
-    );
-    res.status(500).json({
-      error: `Failed to scale ${kind}`,
+    console.error(`[ERROR] editYaml ${namespace}/${resourceType}/${name}:`, err.body?.message || err.message);
+    return res.status(500).json({
+      error: 'Failed to apply YAML',
       details: err.body?.message || err.message,
     });
   }

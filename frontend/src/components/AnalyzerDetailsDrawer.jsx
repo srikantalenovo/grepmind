@@ -1,6 +1,6 @@
 // src/components/AnalyzerDetailsDrawer.jsx
 import React, { useEffect, useState } from 'react';
-import YAML from 'js-yaml';
+import yaml from 'js-yaml';
 
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
@@ -10,9 +10,10 @@ async function apiFetch(path, opts = {}, role = 'editor') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
-      ...(opts.headers || {}),
       'x-user-role': role,
-      ...(!opts.headers?.['Content-Type'] && { 'Content-Type': 'application/json' }),
+      ...(opts.headers || {}),
+      // only set JSON when we actually send a body
+      ...((opts.body && !opts.headers?.['Content-Type']) ? { 'Content-Type': 'application/json' } : {}),
     },
   });
   if (!res.ok) {
@@ -22,27 +23,6 @@ async function apiFetch(path, opts = {}, role = 'editor') {
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
 }
-
-// ---------- mapTypeKeys ----------
-// function mapTypeKeys(displayType) {
-//   const t = (displayType || '').toLowerCase();
-//   switch (t) {
-//     case 'pod': return { apiType: 'pods', kind: 'pods' };
-//     case 'deployment': return { apiType: 'deployments', kind: 'deployments' };
-//     case 'statefulset': return { apiType: 'statefulsets', kind: 'statefulsets' };
-//     case 'daemonset': return { apiType: 'daemonsets', kind: 'daemonsets' };
-//     case 'job': return { apiType: 'jobs', kind: 'jobs' };
-//     case 'cronjob': return { apiType: 'cronjobs', kind: 'cronjobs' };
-//     case 'service': return { apiType: 'services', kind: 'services' };
-//     case 'ingress': return { apiType: 'ingresses', kind: 'ingresses' }; // ✅ fixed plural
-//     case 'configmap': return { apiType: 'configmaps', kind: 'configmaps' };
-//     case 'secret': return { apiType: 'secrets', kind: 'secrets' };
-//     case 'persistentvolumeclaim':
-//       return { apiType: 'persistentvolumeclaims', kind: 'persistentvolumeclaims' };
-//     default:
-//       return { apiType: t + 's', kind: t + 's' };
-//   }
-// }
 
 
 function mapTypeKeys(displayType) {
@@ -138,71 +118,82 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
     onClose();
   };
 
-// scale
-const doScale = async () => {
-  const replicas = parseInt(scaleDraft, 10);
-  if (!Number.isInteger(replicas) || replicas < 0) {
-    alert('Please enter a valid non-negative integer for replicas.');
-    return;
-  }
-  try {
-    await apiFetch(
-      `/api/analyzer/${resource.namespace}/${resource.kind.toLowerCase()}s/${resource.name}/scale`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ replicas }),
-      },
-      role
-    );
-    onActionDone?.(); onClose();
-  } catch (e) {
-    console.error('Scale error:', e);
-    alert(`Failed to scale: ${e.message}`);
-  }
-};
-
-// apply YAML
-const doApplyYaml = async () => {
-  try {
-    if (!yamlText?.trim()) {
-      alert('YAML is empty'); return;
-    }
-    let parsed;
-    try { parsed = YAML.load(yamlText); }  // <-- use YAML.load to match backend
-    catch (err) { alert(`Invalid YAML: ${err.message}`); return; }
-
-    const yamlKind = parsed?.kind;
-    if (!yamlKind) { alert('YAML must include a kind'); return; }
-
-    // name & namespace checks
-    if (parsed?.metadata?.name !== resource.name) {
-      alert(`YAML name (${parsed?.metadata?.name}) does not match resource name (${resource.name})`);
+  // --- Scale (Deployments only)
+  const doScale = async () => {
+    const replicas = Number.parseInt(scaleDraft, 10);
+    if (!Number.isFinite(replicas) || replicas < 0) {
+      alert('Please enter a valid non-negative integer for replicas.');
       return;
     }
-    if (parsed?.metadata?.namespace && parsed.metadata.namespace !== resource.namespace) {
-      alert(`YAML namespace (${parsed.metadata.namespace}) does not match resource namespace (${resource.namespace})`);
-      return;
+    try {
+      await apiFetch(
+        `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ replicas }),
+        },
+        role
+      );
+      onActionDone?.();
+      onClose();
+    } catch (e) {
+      console.error('Scale error:', e);
+      alert(`Failed to scale: ${e.message}`);
     }
+  };
 
-    // path uses plural apiType derived from YAML.kind
-    const { apiType: yamlApiType } = mapTypeKeys(yamlKind);
+  // --- Apply YAML
+  const doApplyYaml = async () => {
+    try {
+      if (!yamlText || yamlText.trim().length === 0) {
+        alert('YAML is empty');
+        return;
+      }
 
-    await apiFetch(
-      `/api/analyzer/${resource.namespace}/${yamlApiType}/${resource.name}/edit`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yaml: yamlText }),
-      },
-      role
-    );
-    onActionDone?.(); onClose();
-  } catch (e) {
-    console.error('Apply YAML failed:', e);
-    alert(`Apply failed: ${e.message}`);
-  }
-};
+      let parsed;
+      try {
+        parsed = yaml.load(yamlText); // js-yaml
+      } catch (err) {
+        alert(`Invalid YAML: ${err.message}`);
+        return;
+      }
+
+      const yamlKind = parsed?.kind;
+      if (!yamlKind) {
+        alert('YAML must include a kind');
+        return;
+      }
+
+      const { apiType: apiFromYaml, kind: kindFromYaml } = mapTypeKeys(yamlKind);
+
+      // Validate name & namespace
+      if (parsed?.metadata?.name !== resource.name) {
+        alert(`YAML name (${parsed?.metadata?.name}) does not match resource name (${resource.name})`);
+        return;
+      }
+      if (parsed?.metadata?.namespace && parsed.metadata.namespace !== resource.namespace) {
+        alert(`YAML namespace (${parsed.metadata.namespace}) does not match resource namespace (${resource.namespace})`);
+        return;
+      }
+
+      await apiFetch(
+        `/api/analyzer/${resource.namespace}/${apiFromYaml}/${resource.name}/edit`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ yaml: yamlText }),
+        },
+        role
+      );
+
+      onActionDone?.();
+      onClose();
+    } catch (e) {
+      console.error('Apply YAML failed:', e);
+      alert(`Apply failed: ${e.message}`);
+    }
+  };
 
 
 
