@@ -157,11 +157,11 @@ const doScale = async () => {
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/merge-patch+json', 
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          spec: { replicas }
+          spec: { replicas: parseInt(scaleDraft, 10) }
         })
       },
       role
@@ -182,7 +182,6 @@ const doApplyYaml = async () => {
       return;
     }
 
-    // Parse YAML
     const parsed = YAML.parse(yamlText);
     const yamlKind = parsed?.kind;
     if (!yamlKind) {
@@ -190,22 +189,20 @@ const doApplyYaml = async () => {
       return;
     }
 
-    // Get correct mapping (plural lowercase for URL, PascalCase for kind)
-    const { apiType, kind } = mapTypeKeys(resource.type);
+    // Map directly from parsed YAML
+    const { apiType, kind } = mapTypeKeys(yamlKind);
 
-    // Validate kind strictly (Deployment vs Deployment, Pod vs Pod, etc.)
-    if (yamlKind !== kind) {
-      alert(`YAML kind (${yamlKind}) does not match resource kind (${kind})`);
-      return;
+    // Ensure namespace matches
+    if (parsed?.metadata?.namespace && parsed.metadata.namespace !== resource.namespace) {
+      parsed.metadata.namespace = resource.namespace; // ✅ auto-fix mismatch
     }
 
-    // Call edit endpoint
     await apiFetch(
       `/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/edit`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yaml: yamlText })
+        body: JSON.stringify({ yaml: YAML.stringify(parsed) }) // ✅ re-stringify with corrected namespace
       },
       role
     );
@@ -216,6 +213,7 @@ const doApplyYaml = async () => {
     alert(`Apply failed: ${e.message}`);
   }
 };
+
 
 
   const doViewSecret = async () => {
