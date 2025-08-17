@@ -7,9 +7,9 @@ async function apiFetch(path, opts = {}, role = 'editor') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
-      'Content-Type': 'application/json',
+      'x-user-role': role,
       ...(opts.headers || {}),
-      'x-user-role': role, // RBAC header
+      ...((opts.body && !opts.headers?.['Content-Type']) ? { 'Content-Type': 'application/json' } : {}),
     },
   });
   if (!res.ok) {
@@ -20,74 +20,97 @@ async function apiFetch(path, opts = {}, role = 'editor') {
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-export default function HelmTab({ namespace }) {
+export default function HelmTab() {
+  const [namespace, setNamespace] = useState('all');
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const [selectedRelease, setSelectedRelease] = useState(null);
 
   const loadReleases = async () => {
     setLoading(true);
     try {
       const data = await apiFetch(`/api/helm/releases?namespace=${namespace}`);
-      setReleases(data.items || []);
-    } catch(e) {
-      console.error(e);
+      setReleases(data.items || []); // Ensure fallback
+    } catch (e) {
+      console.error('Failed to load Helm releases:', e.message);
       setReleases([]);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => { loadReleases(); }, [namespace]);
+  useEffect(() => {
+    loadReleases();
+  }, [namespace]);
 
-  const filtered = releases.filter(r => r.name.toLowerCase().includes(search.toLowerCase()));
+  const openDrawer = (release) => {
+    setSelectedRelease(release);
+    setDrawerOpen(true);
+  };
+
+  const onActionDone = () => {
+    loadReleases();
+  };
 
   return (
     <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Helm Releases ({namespace})</h2>
-        <input 
-          type="text" placeholder="Search releases..."
-          value={search} onChange={e=>setSearch(e.target.value)}
-          className="border rounded px-2 py-1"
-        />
+      <div className="mb-4 flex gap-2 items-center">
+        <label>Namespace:</label>
+        <select value={namespace} onChange={e => setNamespace(e.target.value)}
+          className="border px-2 py-1 rounded">
+          <option value="all">All</option>
+          {/* Optionally load namespaces dynamically */}
+          <option value="monitoring">monitoring</option>
+          <option value="default">default</option>
+        </select>
+        <button className="bg-blue-600 text-white px-3 py-1 rounded" onClick={loadReleases}>
+          Refresh
+        </button>
       </div>
 
-      <div className="overflow-x-auto border rounded shadow-sm">
-        <table className="min-w-full">
+      {loading ? <p>Loading releases…</p> : (
+        <table className="w-full border-collapse border border-gray-300 text-sm">
           <thead>
-            <tr className="bg-indigo-600 text-white text-left">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Chart</th>
-              <th className="px-3 py-2">App Version</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Last Updated</th>
+            <tr className="bg-gray-100">
+              <th className="border px-2 py-1">Name</th>
+              <th className="border px-2 py-1">Namespace</th>
+              <th className="border px-2 py-1">Chart</th>
+              <th className="border px-2 py-1">Version</th>
+              <th className="border px-2 py-1">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={5} className="text-center py-4">Loading…</td></tr>}
-            {!loading && filtered.length===0 && <tr><td colSpan={5} className="text-center py-4">No releases found.</td></tr>}
-            {!loading && filtered.map((r,i)=>(
-              <tr key={i} className="hover:bg-indigo-50 cursor-pointer" onClick={()=>{setSelected(r); setDrawerOpen(true);}}>
-                <td className="px-3 py-2">{r.name}</td>
-                <td className="px-3 py-2">{r.chart}</td>
-                <td className="px-3 py-2">{r.app_version}</td>
-                <td className="px-3 py-2">{r.status}</td>
-                <td className="px-3 py-2">{r.updated}</td>
+            {releases.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="border px-2 py-1 text-center">No releases found</td>
+              </tr>
+            ) : releases.map(rel => (
+              <tr key={`${rel.namespace}-${rel.name}`}>
+                <td className="border px-2 py-1">{rel.name}</td>
+                <td className="border px-2 py-1">{rel.namespace}</td>
+                <td className="border px-2 py-1">{rel.chart}</td>
+                <td className="border px-2 py-1">{rel.version}</td>
+                <td className="border px-2 py-1 flex gap-1">
+                  <button className="bg-green-600 text-white px-2 py-1 rounded"
+                    onClick={() => openDrawer(rel)}>View / Edit YAML</button>
+                  <button className="bg-indigo-600 text-white px-2 py-1 rounded"
+                    onClick={() => openDrawer(rel)}>Upgrade</button>
+                  <button className="bg-yellow-500 text-white px-2 py-1 rounded"
+                    onClick={() => openDrawer(rel)}>Rollback</button>
+                  <button className="bg-red-600 text-white px-2 py-1 rounded"
+                    onClick={() => openDrawer(rel)}>Delete</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      )}
 
-      {drawerOpen && selected && (
+      {drawerOpen && selectedRelease && (
         <HelmReleaseDrawer
           open={drawerOpen}
-          release={selected}
-          onClose={()=>setDrawerOpen(false)}
-          onActionDone={loadReleases}
+          release={selectedRelease}
+          onClose={() => setDrawerOpen(false)}
+          onActionDone={onActionDone}
         />
       )}
     </div>
