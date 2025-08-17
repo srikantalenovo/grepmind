@@ -6,9 +6,10 @@ import 'ace-builds/src-noconflict/theme-github';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
+
 // ---------- apiFetch ----------
 async function apiFetch(path, opts = {}, role = 'editor') {
-  // Validate role
+  // Normalize role
   const userRole = role === 'admin' ? 'admin' : 'editor';
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -17,20 +18,30 @@ async function apiFetch(path, opts = {}, role = 'editor') {
       'x-user-role': userRole,
       ...(opts.headers || {}),
       // Only set JSON header if sending a body and content-type not already set
-      ...((opts.body && !opts.headers?.['Content-Type']) ? { 'Content-Type': 'application/json' } : {}),
+      ...((opts.body && !opts.headers?.['Content-Type'])
+        ? { 'Content-Type': 'application/json' }
+        : {}),
     },
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
+    throw new Error(
+      `HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`
+    );
   }
 
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-export default function HelmReleaseDrawer({ open, release, onClose, onActionDone, role }) {
+export default function HelmReleaseDrawer({
+  open,
+  release,
+  onClose,
+  onActionDone,
+  role,
+}) {
   const [details, setDetails] = useState(null);
   const [yaml, setYaml] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,7 +52,11 @@ export default function HelmReleaseDrawer({ open, release, onClose, onActionDone
   useEffect(() => {
     if (release && open) {
       setLoading(true);
-      apiFetch(`/api/helm/releases/${release.namespace}/${release.name}`, {}, role)
+      apiFetch(
+        `/api/helm/releases/${release.namespace}/${release.name}`,
+        {},
+        role
+      )
         .then((res) => {
           setDetails(res);
           if (res.valuesYaml) setYaml(res.valuesYaml);
@@ -51,13 +66,18 @@ export default function HelmReleaseDrawer({ open, release, onClose, onActionDone
     }
   }, [release, open, role]);
 
+  // --------- Actions ---------
   const handleUpgrade = async () => {
     try {
       setSaving(true);
-      await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/upgrade`, {
-        method: 'POST',
-        body: JSON.stringify({ values: yaml }),
-      }, role);
+      await apiFetch(
+        `/api/helm/releases/${release.namespace}/${release.name}/upgrade`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ values: yaml }),
+        },
+        role // ✅ forward role
+      );
       onActionDone();
       onClose();
     } catch (err) {
@@ -70,9 +90,11 @@ export default function HelmReleaseDrawer({ open, release, onClose, onActionDone
   const handleRollback = async () => {
     try {
       setSaving(true);
-      await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/rollback`, {
-        method: 'POST',
-      }, role);
+      await apiFetch(
+        `/api/helm/releases/${release.namespace}/${release.name}/rollback`,
+        { method: 'POST' },
+        role // ✅ forward role
+      );
       onActionDone();
       onClose();
     } catch (err) {
@@ -85,9 +107,11 @@ export default function HelmReleaseDrawer({ open, release, onClose, onActionDone
   const handleUninstall = async () => {
     try {
       setSaving(true);
-      await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}`, {
-        method: 'DELETE',
-      }, role);
+      await apiFetch(
+        `/api/helm/releases/${release.namespace}/${release.name}`,
+        { method: 'DELETE' },
+        role // ✅ forward role
+      );
       onActionDone();
       onClose();
     } catch (err) {
@@ -112,7 +136,10 @@ export default function HelmReleaseDrawer({ open, release, onClose, onActionDone
             <h2 className="text-lg font-semibold">
               Release: {release?.name} ({release?.namespace})
             </h2>
-            <button onClick={onClose} className="text-white hover:text-gray-200 transition">
+            <button
+              onClick={onClose}
+              className="text-white hover:text-gray-200 transition"
+            >
               ✕
             </button>
           </div>
@@ -129,19 +156,36 @@ export default function HelmReleaseDrawer({ open, release, onClose, onActionDone
                 <div className="border rounded-lg shadow p-3">
                   <h3 className="text-indigo-600 font-medium mb-2">Details</h3>
                   <ul className="text-sm space-y-1">
-                    <li><strong>Name:</strong> {release?.name}</li>
-                    <li><strong>Namespace:</strong> {release?.namespace}</li>
-                    <li><strong>Chart:</strong> {release?.chart}</li>
-                    <li><strong>App Version:</strong> {release?.app_version || '-'}</li>
-                    <li><strong>Revision:</strong> {release?.revision}</li>
-                    <li><strong>Status:</strong> {release?.status}</li>
-                    <li><strong>Updated:</strong> {release?.updated}</li>
+                    <li>
+                      <strong>Name:</strong> {release?.name}
+                    </li>
+                    <li>
+                      <strong>Namespace:</strong> {release?.namespace}
+                    </li>
+                    <li>
+                      <strong>Chart:</strong> {release?.chart}
+                    </li>
+                    <li>
+                      <strong>App Version:</strong>{' '}
+                      {release?.app_version || '-'}
+                    </li>
+                    <li>
+                      <strong>Revision:</strong> {release?.revision}
+                    </li>
+                    <li>
+                      <strong>Status:</strong> {release?.status}
+                    </li>
+                    <li>
+                      <strong>Updated:</strong> {release?.updated}
+                    </li>
                   </ul>
                 </div>
 
                 {/* YAML Editor */}
                 <div className="border rounded-lg shadow p-3">
-                  <h3 className="text-indigo-600 font-medium mb-2">Values.yaml</h3>
+                  <h3 className="text-indigo-600 font-medium mb-2">
+                    Values.yaml
+                  </h3>
                   <AceEditor
                     mode="yaml"
                     theme="github"
