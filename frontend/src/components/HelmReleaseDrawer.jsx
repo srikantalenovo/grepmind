@@ -1,93 +1,104 @@
-import React, { useState } from "react";
-import { X } from "lucide-react";
-import Editor from "@monaco-editor/react";
-import axios from "axios";
+// src/components/HelmReleaseDrawer.jsx
+import React, { useEffect, useState } from 'react';
 
-function HelmReleaseDrawer({ release, onClose, refresh }) {
-  const [yaml, setYaml] = useState(release.valuesYaml || "");
+export default function HelmReleaseDrawer({ open, onClose, release, role, onActionDone }) {
+  const [yamlContent, setYamlContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
 
-  const handleAction = async (action) => {
-    try {
+  const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+  useEffect(() => {
+    if (!release || !open) return;
+
+    const fetchYaml = async () => {
       setLoading(true);
-      if (action === "upgrade") {
-        await axios.post(`/api/helm/releases/${release.namespace}/${release.name}/upgrade`, { values: yaml });
-      } else if (action === "rollback") {
-        await axios.post(`/api/helm/releases/${release.namespace}/${release.name}/rollback`);
-      } else if (action === "delete") {
-        await axios.delete(`/api/helm/releases/${release.namespace}/${release.name}`);
+      setErrMsg('');
+      try {
+        const res = await fetch(`${API_BASE}/api/helm/releases/${release.namespace}/${release.name}/yaml`, {
+          headers: { 'x-user-role': role },
+        });
+        if (!res.ok) throw new Error(`Failed to fetch YAML: ${res.statusText}`);
+        const data = await res.text();
+        setYamlContent(data);
+      } catch (e) {
+        console.error(e);
+        setErrMsg(e.message || 'Failed to load release YAML.');
+      } finally {
+        setLoading(false);
       }
-      refresh();
-      onClose();
-    } catch (err) {
-      console.error(`❌ Failed to ${action} release:`, err);
+    };
+
+    fetchYaml();
+  }, [release, open, role, API_BASE]);
+
+  const handleApply = async () => {
+    setLoading(true);
+    setErrMsg('');
+    try {
+      const res = await fetch(`${API_BASE}/api/helm/releases/${release.namespace}/${release.name}/apply`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/yaml',
+          'x-user-role': role,
+        },
+        body: yamlContent,
+      });
+      if (!res.ok) throw new Error(`Failed to apply YAML: ${res.statusText}`);
+      onActionDone?.();
+      onClose?.();
+    } catch (e) {
+      console.error(e);
+      setErrMsg(e.message || 'Failed to apply changes.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (!open) return null;
+
   return (
-    <div className="fixed inset-0 flex justify-end bg-black/40 z-50">
-      <div className="w-[600px] bg-white h-full shadow-lg p-6 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b pb-3 mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">
-            {release.name} ({release.namespace})
-          </h2>
+    <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/30 backdrop-blur-sm">
+      <div className="bg-white w-full md:w-3/4 lg:w-1/2 h-full overflow-y-auto shadow-lg p-6 relative">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-600 hover:text-gray-900 font-bold text-xl"
+          title="Close"
+        >
+          ×
+        </button>
+
+        <h2 className="text-2xl font-semibold mb-4">Helm Release: {release?.name}</h2>
+        <p className="text-sm text-gray-600 mb-4">Namespace: {release?.namespace}</p>
+
+        {errMsg && <p className="text-red-600 mb-4">{errMsg}</p>}
+
+        <textarea
+          value={yamlContent}
+          onChange={e => setYamlContent(e.target.value)}
+          className="w-full h-[400px] border border-gray-300 rounded-lg p-2 font-mono text-sm resize-y"
+          placeholder="YAML content..."
+        />
+
+        <div className="mt-4 flex gap-3">
+          <button
+            onClick={handleApply}
+            disabled={loading}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition"
+          >
+            {loading ? 'Applying…' : 'Apply Changes'}
+          </button>
+
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            <X className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
-
-        {/* Info */}
-        <div className="space-y-2 mb-4 text-sm text-gray-600">
-          <p><strong>Chart:</strong> {release.chart}</p>
-          <p><strong>Version:</strong> {release.version}</p>
-          <p><strong>Status:</strong> {release.status}</p>
-          <p><strong>Updated:</strong> {release.updated}</p>
-        </div>
-
-        {/* YAML Editor */}
-        <div className="flex-1 border rounded overflow-hidden">
-          <Editor
-            height="100%"
-            defaultLanguage="yaml"
-            value={yaml}
-            onChange={(val) => setYaml(val || "")}
-            options={{ minimap: { enabled: false } }}
-          />
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 mt-4">
-          <button
-            onClick={() => handleAction("upgrade")}
             disabled={loading}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition"
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 transition"
           >
-            Upgrade
-          </button>
-          <button
-            onClick={() => handleAction("rollback")}
-            disabled={loading}
-            className="px-4 py-2 bg-yellow-500 text-white rounded-lg shadow hover:bg-yellow-600 transition"
-          >
-            Rollback
-          </button>
-          <button
-            onClick={() => handleAction("delete")}
-            disabled={loading}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700 transition"
-          >
-            Delete
+            Cancel
           </button>
         </div>
       </div>
     </div>
   );
 }
-
-export default HelmReleaseDrawer;

@@ -1,134 +1,136 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { Search } from "lucide-react";
-import HelmReleaseDrawer from "../components/HelmReleaseDrawer";
+// src/pages/Helm.jsx
+import React, { useEffect, useState, useRef, useContext } from 'react';
+import HelmReleaseDrawer from '../components/HelmReleaseDrawer.jsx';
+import { AuthContext } from '../context/AuthContext';
 
-function Helm() {
+const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+async function apiFetch(path, opts = {}, role = 'editor') {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+      'x-user-role': role,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
+  }
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('application/json') ? res.json() : res.text();
+}
+
+async function fetchReleases(role) {
+  return apiFetch('/api/helm/releases', {}, role);
+}
+
+export default function Helm() {
+  const { user } = useContext(AuthContext);
+  const role = user?.role || 'editor';
+
   const [releases, setReleases] = useState([]);
-  const [selectedRelease, setSelectedRelease] = useState(null);
-  const [namespace, setNamespace] = useState("default");
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedRelease, setSelectedRelease] = useState(null);
 
-  const fetchReleases = async () => {
+  const load = async () => {
+    setLoading(true);
+    setErrMsg('');
     try {
-      setLoading(true);
-      const { data } = await axios.get(
-        `/api/helm/releases?namespace=${namespace}`
-      );
-      setReleases(data || []);
-    } catch (err) {
-      console.error("❌ Failed to fetch helm releases:", err);
+      const data = await fetchReleases(role);
+      setReleases(Array.isArray(data?.items) ? data.items : []);
+    } catch (e) {
+      console.error('Failed to fetch Helm releases', e);
+      setErrMsg(e.message || 'Failed to load releases.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchReleases();
-  }, [namespace]);
+    load();
+  }, [role]);
 
-  const filtered = releases.filter(r =>
-    r.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const onRowClick = (release) => {
+    setSelectedRelease(release);
+    setDrawerOpen(true);
+  };
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-800">
-          Helm Releases
-        </h1>
-        <div className="flex gap-2">
-          <select
-            value={namespace}
-            onChange={(e) => setNamespace(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm shadow-sm"
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-indigo-100 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Helm Releases</h1>
+        </div>
+        <div>
+          <button
+            onClick={load}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition"
           >
-            <option value="default">default</option>
-            <option value="kube-system">kube-system</option>
-            <option value="monitoring">monitoring</option>
-            {/* Add more namespaces dynamically later */}
-          </select>
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search releases..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 pr-3 py-1.5 border rounded-lg text-sm shadow-sm"
-            />
-          </div>
+            Refresh
+          </button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-gray-50 border-b text-gray-600 font-medium">
-            <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Namespace</th>
-              <th className="px-4 py-3">Chart</th>
-              <th className="px-4 py-3">Version</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan="6" className="text-center py-6">
-                  Loading releases...
-                </td>
+      <div className="rounded-2xl overflow-hidden shadow-lg border border-gray-200 backdrop-blur-md bg-white/70">
+        <div className="overflow-x-auto">
+          <table className="min-w-full table-fixed">
+            <thead>
+              <tr className="bg-indigo-700 text-white text-xs uppercase tracking-wide">
+                <th className="px-4 py-3 text-left border-b border-indigo-200/40 w-[20%]">Name</th>
+                <th className="px-4 py-3 text-left border-b border-indigo-200/40 w-[20%]">Namespace</th>
+                <th className="px-4 py-3 text-left border-b border-indigo-200/40 w-[20%]">Chart</th>
+                <th className="px-4 py-3 text-left border-b border-indigo-200/40 w-[20%]">Version</th>
+                <th className="px-4 py-3 text-left border-b border-indigo-200/40 w-[20%]">Status</th>
               </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan="6" className="text-center py-6 text-gray-500">
-                  No releases found
-                </td>
-              </tr>
-            ) : (
-              filtered.map((r, i) => (
-                <tr
-                  key={i}
-                  className="border-b hover:bg-indigo-50 cursor-pointer transition-all"
-                  onClick={() => setSelectedRelease(r)}
-                >
-                  <td className="px-4 py-3">{r.name}</td>
-                  <td className="px-4 py-3">{r.namespace}</td>
-                  <td className="px-4 py-3">{r.chart}</td>
-                  <td className="px-4 py-3">{r.version}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${
-                        r.status === "deployed"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {r.status}
-                    </span>
+            </thead>
+            <tbody>
+              {!loading && releases.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-gray-600 text-center">
+                    {errMsg || 'No Helm releases found.'}
                   </td>
-                  <td className="px-4 py-3">{r.updated}</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              )}
+              {loading && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-gray-700 text-center">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin h-6 w-6 rounded-full border-2 border-indigo-200 border-t-indigo-700" />
+                      <span className="ml-3">Loading…</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!loading &&
+                releases.map((release, idx) => (
+                  <tr
+                    key={`${release.namespace}-${release.name}-${idx}`}
+                    className="transition hover:bg-indigo-50 cursor-pointer"
+                    onClick={() => onRowClick(release)}
+                  >
+                    <td className="px-4 py-3 border-b border-gray-200 text-gray-900">{release.name}</td>
+                    <td className="px-4 py-3 border-b border-gray-200 text-gray-900">{release.namespace}</td>
+                    <td className="px-4 py-3 border-b border-gray-200 text-gray-900">{release.chart}</td>
+                    <td className="px-4 py-3 border-b border-gray-200 text-gray-900">{release.version}</td>
+                    <td className="px-4 py-3 border-b border-gray-200 text-gray-900">{release.status}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Drawer */}
-      {selectedRelease && (
-        <HelmReleaseDrawer
-          release={selectedRelease}
-          onClose={() => setSelectedRelease(null)}
-          refresh={fetchReleases}
-        />
-      )}
+      <HelmReleaseDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        release={selectedRelease}
+        role={role}
+        onActionDone={load}
+      />
     </div>
   );
 }
-
-export default Helm;
