@@ -1,10 +1,10 @@
+// src/components/HelmReleaseDrawer.jsx
 import React, { useEffect, useState } from 'react';
 import AceEditor from 'react-ace';
-import { motion, AnimatePresence } from 'framer-motion';
 import 'ace-builds/src-noconflict/mode-yaml';
 import 'ace-builds/src-noconflict/theme-github';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 // ---------- apiFetch ----------
 async function apiFetch(path, opts = {}, role = 'editor') {
@@ -30,129 +30,169 @@ async function apiFetch(path, opts = {}, role = 'editor') {
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-export default function HelmReleaseDrawer({ open, onClose, release, onActionDone }) {
-  const [details, setDetails] = useState('');
+export default function HelmReleaseDrawer({ open, release, onClose, onActionDone, role }) {
+  const [details, setDetails] = useState(null);
+  const [yaml, setYaml] = useState('');
   const [loading, setLoading] = useState(false);
-  const [upgradeChart, setUpgradeChart] = useState('');
-  const [rollbackRevision, setRollbackRevision] = useState('');
-  const [yamlText, setYamlText] = useState('');
-  const [yamlLoading, setYamlLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
-  const loadReleaseDetails = async () => {
-    setLoading(true);
+  // Fetch release details
+  useEffect(() => {
+    if (release && open) {
+      setLoading(true);
+      apiFetch(`/api/helm/releases/${release.namespace}/${release.name}`, {}, role)
+        .then((res) => {
+          setDetails(res);
+          if (res.valuesYaml) setYaml(res.valuesYaml);
+        })
+        .catch((err) => setError(err.message))
+        .finally(() => setLoading(false));
+    }
+  }, [release, open, role]);
+
+  const handleUpgrade = async () => {
     try {
-      const data = await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}`);
-      setDetails(JSON.stringify(data.details || data, null, 2));
-      if(data.values) setYamlText(data.values);
+      setSaving(true);
+      await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/upgrade`, {
+        method: 'POST',
+        body: JSON.stringify({ values: yaml }),
+      }, role);
+      onActionDone();
+      onClose();
     } catch (err) {
-      setDetails('Failed to load details');
-      setYamlText('');
-      console.error(err);
+      setError(err.message);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  useEffect(() => { if(release && open) loadReleaseDetails(); }, [release, open]);
-
-  const handleUpgrade = async () => {
-    if(!upgradeChart) return alert('Enter chart path');
-    await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/upgrade`, {
-      method: 'POST',
-      body: JSON.stringify({ chart: upgradeChart })
-    });
-    onActionDone(); onClose();
-  };
-
   const handleRollback = async () => {
-    if(!rollbackRevision) return alert('Enter revision number');
-    await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/rollback`, {
-      method: 'POST',
-      body: JSON.stringify({ revision: rollbackRevision })
-    });
-    onActionDone(); onClose();
-  };
-
-  const handleDelete = async () => {
-    if(!window.confirm(`Delete release ${release.name}?`)) return;
-    await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}`, { method: 'DELETE' });
-    onActionDone(); onClose();
-  };
-
-  const handleApplyYaml = async () => {
-    if(!yamlText) return alert('YAML is empty');
-    setYamlLoading(true);
     try {
-      await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/apply-values`, {
+      setSaving(true);
+      await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}/rollback`, {
         method: 'POST',
-        body: JSON.stringify({ values: yamlText })
-      });
-      alert('Values applied successfully');
+      }, role);
       onActionDone();
-    } catch(err) {
-      alert('Failed to apply values: ' + err.message);
-      console.error(err);
-    } finally { setYamlLoading(false); }
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if(!open) return null;
+  const handleUninstall = async () => {
+    try {
+      setSaving(true);
+      await apiFetch(`/api/helm/releases/${release.namespace}/${release.name}`, {
+        method: 'DELETE',
+      }, role);
+      onActionDone();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <AnimatePresence>
-      <motion.div 
-        className="fixed inset-0 bg-black/30 flex justify-end"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-      >
+      {open && (
         <motion.div
-          className="w-2/5 bg-white h-full p-4 overflow-auto shadow-xl"
           initial={{ x: '100%' }}
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+          className="fixed top-0 right-0 h-full w-[70%] bg-white shadow-2xl z-50 flex flex-col"
         >
-          <button className="float-right text-red-600" onClick={onClose}>Close</button>
-          <h2 className="text-lg font-semibold mb-2">{release.name}</h2>
-
-          <div className="mb-2 flex gap-2">
-            <input type="text" placeholder="Chart path" value={upgradeChart} onChange={e => setUpgradeChart(e.target.value)}
-              className="border px-2 py-1 rounded w-full"/>
-            <button className="bg-indigo-600 text-white px-2 py-1 rounded" onClick={handleUpgrade}>Upgrade</button>
+          {/* Header */}
+          <div className="bg-indigo-600 text-white p-4 flex justify-between items-center rounded-tl-2xl">
+            <h2 className="text-lg font-semibold">
+              Release: {release?.name} ({release?.namespace})
+            </h2>
+            <button onClick={onClose} className="text-white hover:text-gray-200 transition">
+              ✕
+            </button>
           </div>
 
-          <div className="mb-2 flex gap-2">
-            <input type="number" placeholder="Revision" value={rollbackRevision} onChange={e => setRollbackRevision(e.target.value)}
-              className="border px-2 py-1 rounded w-full"/>
-            <button className="bg-yellow-500 text-white px-2 py-1 rounded" onClick={handleRollback}>Rollback</button>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {loading ? (
+              <p className="text-gray-500">Loading release details…</p>
+            ) : error ? (
+              <p className="text-red-500">{error}</p>
+            ) : (
+              <>
+                {/* Release Info */}
+                <div className="border rounded-lg shadow p-3">
+                  <h3 className="text-indigo-600 font-medium mb-2">Details</h3>
+                  <ul className="text-sm space-y-1">
+                    <li><strong>Name:</strong> {release?.name}</li>
+                    <li><strong>Namespace:</strong> {release?.namespace}</li>
+                    <li><strong>Chart:</strong> {release?.chart}</li>
+                    <li><strong>App Version:</strong> {release?.app_version || '-'}</li>
+                    <li><strong>Revision:</strong> {release?.revision}</li>
+                    <li><strong>Status:</strong> {release?.status}</li>
+                    <li><strong>Updated:</strong> {release?.updated}</li>
+                  </ul>
+                </div>
+
+                {/* YAML Editor */}
+                <div className="border rounded-lg shadow p-3">
+                  <h3 className="text-indigo-600 font-medium mb-2">Values.yaml</h3>
+                  <AceEditor
+                    mode="yaml"
+                    theme="github"
+                    name="helm-values-editor"
+                    width="100%"
+                    height="300px"
+                    fontSize={14}
+                    value={yaml}
+                    onChange={setYaml}
+                    editorProps={{ $blockScrolling: true }}
+                    className="border rounded"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="mb-4">
-            <button className="bg-red-600 text-white px-3 py-1 rounded" onClick={handleDelete}>Delete Release</button>
+          {/* Footer Actions */}
+          <div className="p-4 border-t flex justify-between bg-gray-50 rounded-br-2xl">
+            <div className="space-x-2">
+              <button
+                onClick={handleUpgrade}
+                disabled={saving}
+                className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition"
+              >
+                {saving ? 'Applying…' : 'Apply / Upgrade'}
+              </button>
+              <button
+                onClick={handleRollback}
+                disabled={saving}
+                className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition"
+              >
+                Rollback
+              </button>
+              <button
+                onClick={handleUninstall}
+                disabled={saving}
+                className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition"
+              >
+                Uninstall
+              </button>
+            </div>
+            <button
+              onClick={onClose}
+              className="px-3 py-1 border rounded hover:bg-gray-100 transition"
+            >
+              Cancel
+            </button>
           </div>
-
-          {loading ? <p>Loading details…</p> : <pre className="text-sm bg-gray-100 p-2 rounded overflow-auto mb-4">{details}</pre>}
-
-          <h3 className="text-md font-semibold mb-1">Edit Values YAML</h3>
-          <AceEditor
-            mode="yaml"
-            theme="github"
-            width="100%"
-            height="300px"
-            value={yamlText}
-            onChange={setYamlText}
-            name="helm-values-editor"
-            editorProps={{ $blockScrolling: true }}
-          />
-          <button
-            className={`mt-2 px-3 py-1 rounded text-white ${yamlLoading ? 'bg-gray-400' : 'bg-green-600'}`}
-            onClick={handleApplyYaml}
-            disabled={yamlLoading}
-          >
-            {yamlLoading ? 'Applying…' : 'Apply YAML'}
-          </button>
         </motion.div>
-      </motion.div>
+      )}
     </AnimatePresence>
   );
 }

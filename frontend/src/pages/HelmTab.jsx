@@ -28,18 +28,23 @@ async function apiFetch(path, opts = {}, role = 'editor') {
 }
 
 export default function HelmTab() {
-  const [namespaces, setNamespaces] = useState([]);
+  const [namespaces, setNamespaces] = useState(['all']);
   const [selectedNamespace, setSelectedNamespace] = useState('all');
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedRelease, setSelectedRelease] = useState(null);
-  const [role, setRole] = useState('editor'); // can be dynamically set
+  const [role] = useState('editor');
 
-  // ---------- Fetch all namespaces ----------
+  // ---------- Fetch namespaces ----------
   const loadNamespaces = useCallback(async () => {
     try {
       const data = await apiFetch('/api/cluster/namespaces', {}, role);
-      setNamespaces(['all', ...data.namespaces]);
+      const nsList = Array.isArray(data) ? data : data.namespaces;
+      if (nsList && nsList.length > 0) {
+        setNamespaces(['all', ...nsList]);
+      } else {
+        setNamespaces(['all']);
+      }
     } catch (err) {
       console.error('Failed to load namespaces', err);
       setNamespaces(['all']);
@@ -51,7 +56,6 @@ export default function HelmTab() {
     setLoading(true);
     try {
       const data = await apiFetch(`/api/helm/releases?namespace=${selectedNamespace}`, {}, role);
-      console.log('Helm API response:', data); // debug
       setReleases(data.releases || []);
     } catch (err) {
       console.error('Failed to load Helm releases', err);
@@ -61,16 +65,18 @@ export default function HelmTab() {
     }
   }, [selectedNamespace, role]);
 
-  // ---------- Auto-refresh every 30 minutes ----------
+  // ---------- Auto refresh ----------
   useEffect(() => {
     loadNamespaces();
   }, [loadNamespaces]);
 
   useEffect(() => {
-    loadReleases();
-    const interval = setInterval(loadReleases, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [loadReleases]);
+    if (namespaces.length > 0) {
+      loadReleases();
+      const interval = setInterval(loadReleases, 30 * 60 * 1000); // 30 min
+      return () => clearInterval(interval);
+    }
+  }, [loadReleases, namespaces]);
 
   // ---------- Render ----------
   return (
@@ -93,20 +99,22 @@ export default function HelmTab() {
 
       <div className="overflow-auto rounded shadow border">
         <table className="min-w-full border-collapse">
-          <thead className="bg-indigo-600 text-white rounded-t">
+          <thead className="bg-indigo-600 text-white">
             <tr>
               <th className="px-4 py-2 text-left rounded-tl">Name</th>
               <th className="px-4 py-2 text-left">Namespace</th>
               <th className="px-4 py-2 text-left">Chart</th>
-              <th className="px-4 py-2 text-left">Version</th>
+              <th className="px-4 py-2 text-left">App Version</th>
+              <th className="px-4 py-2 text-left">Revision</th>
+              <th className="px-4 py-2 text-left">Updated</th>
               <th className="px-4 py-2 text-left rounded-tr">Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center p-4">Loading releases…</td></tr>
+              <tr><td colSpan={7} className="text-center p-4">Loading releases…</td></tr>
             ) : releases.length === 0 ? (
-              <tr><td colSpan={5} className="text-center p-4">No releases found</td></tr>
+              <tr><td colSpan={7} className="text-center p-4">No releases found</td></tr>
             ) : (
               releases.map(rel => (
                 <tr
@@ -116,8 +124,10 @@ export default function HelmTab() {
                 >
                   <td className="px-4 py-2">{rel.name}</td>
                   <td className="px-4 py-2">{rel.namespace}</td>
-                  <td className="px-4 py-2">{rel.chart?.name || '-'}</td>
-                  <td className="px-4 py-2">{rel.chart?.version || '-'}</td>
+                  <td className="px-4 py-2">{rel.chart}</td>
+                  <td className="px-4 py-2">{rel.app_version || '-'}</td>
+                  <td className="px-4 py-2">{rel.revision}</td>
+                  <td className="px-4 py-2">{rel.updated}</td>
                   <td className="px-4 py-2">{rel.status}</td>
                 </tr>
               ))
