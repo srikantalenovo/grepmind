@@ -1,24 +1,24 @@
-// src/components/analyzer/Helm.jsx
-import React, { useState, useEffect } from "react";
-import { Button, Input, Badge, Table, TableHead, TableBody, TableRow, TableCell } from "@/components/ui";
-import { FaSearch } from "react-icons/fa";
-import HelmReleaseDrawer from "../components/HelmReleaseDrawer";
+import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { Search } from "lucide-react";
+import HelmReleaseDrawer from "../components/HelmReleaseDrawer";
 
-export default function Helm({ namespace }) {
+function Helm() {
   const [releases, setReleases] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
   const [selectedRelease, setSelectedRelease] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [namespace, setNamespace] = useState("default");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const fetchReleases = async () => {
-    setLoading(true);
     try {
-      const res = await axios.get(`/api/helm/${namespace}/releases`, { params: { search } });
-      setReleases(res.data.releases || []);
+      setLoading(true);
+      const { data } = await axios.get(
+        `/api/helm/releases?namespace=${namespace}`
+      );
+      setReleases(data || []);
     } catch (err) {
-      console.error("Failed to fetch Helm releases", err);
+      console.error("❌ Failed to fetch helm releases:", err);
     } finally {
       setLoading(false);
     }
@@ -26,85 +26,109 @@ export default function Helm({ namespace }) {
 
   useEffect(() => {
     fetchReleases();
-  }, [namespace, search]);
+  }, [namespace]);
 
-  const openDrawer = (release) => {
-    setSelectedRelease(release);
-    setDrawerOpen(true);
-  };
+  const filtered = releases.filter(r =>
+    r.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <Input
-          placeholder="Search releases..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1"
-        />
-        <Button onClick={fetchReleases} className="flex items-center gap-2">
-          <FaSearch /> Refresh
-        </Button>
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold text-gray-800">
+          Helm Releases
+        </h1>
+        <div className="flex gap-2">
+          <select
+            value={namespace}
+            onChange={(e) => setNamespace(e.target.value)}
+            className="border rounded-lg px-3 py-1.5 text-sm shadow-sm"
+          >
+            <option value="default">default</option>
+            <option value="kube-system">kube-system</option>
+            <option value="monitoring">monitoring</option>
+            {/* Add more namespaces dynamically later */}
+          </select>
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search releases..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 pr-3 py-1.5 border rounded-lg text-sm shadow-sm"
+            />
+          </div>
+        </div>
       </div>
 
-      <Table className="bg-white/5 rounded-2xl overflow-hidden shadow-md">
-        <TableHead className="bg-indigo-500/30 text-white">
-          <TableRow>
-            <TableCell>Name</TableCell>
-            <TableCell>Namespace</TableCell>
-            <TableCell>Chart</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell>Revision</TableCell>
-            <TableCell>App Version</TableCell>
-            <TableCell>Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {loading ? (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center py-4">Loading...</TableCell>
-            </TableRow>
-          ) : releases.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center py-4">No releases found</TableCell>
-            </TableRow>
-          ) : (
-            releases.map((r) => (
-              <TableRow key={r.name} className="hover:bg-indigo-500/10 cursor-pointer transition-colors" onClick={() => openDrawer(r)}>
-                <TableCell>{r.name}</TableCell>
-                <TableCell>{r.namespace}</TableCell>
-                <TableCell>{r.chart}</TableCell>
-                <TableCell>
-                  <Badge
-                    className={`px-2 py-1 rounded-xl ${
-                      r.status === "deployed" ? "bg-green-500/30 text-green-500" :
-                      r.status === "failed" ? "bg-red-500/30 text-red-500" :
-                      "bg-yellow-500/30 text-yellow-500"
-                    }`}
-                  >
-                    {r.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{r.revision}</TableCell>
-                <TableCell>{r.app_version}</TableCell>
-                <TableCell>
-                  <Button size="sm" onClick={(e) => { e.stopPropagation(); openDrawer(r); }}>Manage</Button>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      {/* Table */}
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-50 border-b text-gray-600 font-medium">
+            <tr>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Namespace</th>
+              <th className="px-4 py-3">Chart</th>
+              <th className="px-4 py-3">Version</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan="6" className="text-center py-6">
+                  Loading releases...
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="text-center py-6 text-gray-500">
+                  No releases found
+                </td>
+              </tr>
+            ) : (
+              filtered.map((r, i) => (
+                <tr
+                  key={i}
+                  className="border-b hover:bg-indigo-50 cursor-pointer transition-all"
+                  onClick={() => setSelectedRelease(r)}
+                >
+                  <td className="px-4 py-3">{r.name}</td>
+                  <td className="px-4 py-3">{r.namespace}</td>
+                  <td className="px-4 py-3">{r.chart}</td>
+                  <td className="px-4 py-3">{r.version}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`px-2 py-1 rounded text-xs font-medium ${
+                        r.status === "deployed"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {r.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">{r.updated}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-      {drawerOpen && selectedRelease && (
+      {/* Drawer */}
+      {selectedRelease && (
         <HelmReleaseDrawer
           release={selectedRelease}
-          namespace={namespace}
-          isOpen={drawerOpen}
-          setIsOpen={setDrawerOpen}
+          onClose={() => setSelectedRelease(null)}
           refresh={fetchReleases}
         />
       )}
     </div>
   );
 }
+
+export default Helm;
