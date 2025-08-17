@@ -76,36 +76,65 @@ export const deletePod = async (req, res) => {
 };
 
 // POST /analyzer/:namespace/deployments/:name/scale
+// export const scaleDeployment = async (req, res) => {
+//   try {
+//     const { namespace, name } = req.params;
+//     let { replicas } = req.body || {};
+//     replicas = Number(replicas);
+//     if (!Number.isInteger(replicas) || replicas < 0) {
+//       return res.status(400).json({ error: 'Invalid replicas value' });
+//     }
+
+//     const patch = { spec: { replicas } };
+
+//     // Use JSON Merge Patch to avoid 415
+//     const resp = await appsV1Api.patchNamespacedDeployment(
+//       name,
+//       namespace,
+//       patch,
+//       undefined, undefined, undefined, undefined,
+//       { headers: { 'Content-Type': 'application/merge-patch+json' } }
+//     );
+
+//     res.json({ ok: true, replicas: resp.body?.spec?.replicas ?? replicas });
+//   } catch (err) {
+//     console.error('[ERROR] scaleDeployment:', err.body?.message || err.message);
+//     res.status(500).json({
+//       error: 'Failed to scale deployment',
+//       details: err.body?.message || err.message,
+//     });
+//   }
+// };
+
+
 export const scaleDeployment = async (req, res) => {
+  const { namespace, name } = req.params;
+  const { replicas } = req.body || {};
+
+  if (typeof replicas !== 'number' || replicas < 0) {
+    return res.status(400).json({ error: 'Invalid replicas value' });
+  }
+
   try {
-    const { namespace, name } = req.params;
-    let { replicas } = req.body || {};
-    replicas = Number(replicas);
-    if (!Number.isInteger(replicas) || replicas < 0) {
-      return res.status(400).json({ error: 'Invalid replicas value' });
-    }
+    const body = {
+      apiVersion: 'apps/v1',
+      kind: 'Scale',
+      metadata: { name, namespace },
+      spec: { replicas },
+    };
 
-    const patch = { spec: { replicas } };
-
-    // Use JSON Merge Patch to avoid 415
-    const resp = await appsV1Api.patchNamespacedDeployment(
+    const result = await appsV1Api.replaceNamespacedDeploymentScale(
       name,
       namespace,
-      patch,
-      undefined, undefined, undefined, undefined,
-      { headers: { 'Content-Type': 'application/merge-patch+json' } }
+      body
     );
 
-    res.json({ ok: true, replicas: resp.body?.spec?.replicas ?? replicas });
+    res.json(result.body);
   } catch (err) {
-    console.error('[ERROR] scaleDeployment:', err.body?.message || err.message);
-    res.status(500).json({
-      error: 'Failed to scale deployment',
-      details: err.body?.message || err.message,
-    });
+    console.error(`[ERROR] scaleDeployment ${namespace}/${name}:`, err.body?.message || err.message);
+    res.status(500).json({ error: 'Failed to scale deployment', details: err.body?.message || err.message });
   }
 };
-
 
 // DELETE /analyzer/:namespace/:kind/:name  (Admin)
 export const deleteResource = async (req, res) => {
