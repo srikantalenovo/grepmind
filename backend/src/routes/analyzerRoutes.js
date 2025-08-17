@@ -1,5 +1,5 @@
 import express from 'express';
-import { rbac } from '../middleware/rbac.js';
+import { rbac } from '../middleware/rbacMiddleware.js';
 import {
   getAnalyzerDetails,
   getAnalyzerYaml,
