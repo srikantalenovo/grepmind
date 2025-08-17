@@ -7,6 +7,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import resourcesRoutes from "./routes/resourcesRoutes.js";
 import clusterRoutes from './routes/clusterRoutes.js';
 import analyzerRoutes from './routes/analyzerRoutes.js';
+import helmRoutes from './routes/helmRoutes.js';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use("/api/resources", resourcesRoutes);
 app.use('/api/cluster', clusterRoutes);
 app.use('/analyzer', analyzerRoutes);
 app.use('/api/analyzer', analyzerRoutes);
+app.use('/api/helm', helmRoutes);  
 
 // Database init + extension check
 async function initDatabase() {

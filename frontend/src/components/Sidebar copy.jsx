@@ -1,7 +1,16 @@
 // src/components/Sidebar.jsx
-import React, { useContext, useState } from "react";
+import React, { useContext } from "react";
 import {
-  FaHome, FaBook, FaBrain, FaChartBar, FaFileAlt, FaUsers, FaCog, FaSignOutAlt, FaBars
+  FaHome,
+  FaBook,
+  FaBrain,
+  FaChartBar,
+  FaFileAlt,
+  FaUsers,
+  FaCog,
+  FaSignOutAlt,
+  FaBars,
+  FaTimes,
 } from "react-icons/fa";
 import { Link, useLocation } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
@@ -15,12 +24,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     admin: [
       { name: "Home", icon: <FaHome />, path: "/" },
       { name: "Resources", icon: <FaBook />, path: "/resources" },
-      { 
-        name: "Analyzer", icon: <FaBrain />, path: "/analyzer", submenu: [
-          { name: "Analyzer Dashboard", path: "/analyzer" },
-          { name: "Helm Releases", path: "/analyzer/helm" }
-        ] 
-      },
+      { name: "Analyzer", icon: <FaBrain />, path: "/analyzer" },
       { name: "Analytics", icon: <FaChartBar />, path: "/analytics" },
       { name: "LogsView", icon: <FaFileAlt />, path: "/logs" },
       { name: "Users", icon: <FaUsers />, path: "/users" },
@@ -29,12 +33,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     editor: [
       { name: "Home", icon: <FaHome />, path: "/" },
       { name: "Resources", icon: <FaBook />, path: "/resources" },
-      { 
-        name: "Analyzer", icon: <FaBrain />, path: "/analyzer", submenu: [
-          { name: "Analyzer Dashboard", path: "/analyzer" },
-          { name: "Helm Releases", path: "/analyzer/helm" }
-        ] 
-      },
+      { name: "Analyzer", icon: <FaBrain />, path: "/analyzer" },
       { name: "Analytics", icon: <FaChartBar />, path: "/analytics" },
       { name: "LogsView", icon: <FaFileAlt />, path: "/logs" },
     ],
@@ -56,6 +55,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       >
         {/* Top Section */}
         <div>
+          {/* App Name + Toggle */}
           <div className="flex items-center justify-between mb-8">
             <div
               className={`flex items-center transition-all duration-500 overflow-hidden 
@@ -71,52 +71,34 @@ export default function Sidebar({ isOpen, setIsOpen }) {
               className="p-2 rounded-lg hover:bg-white/30 transition-transform duration-300"
             >
               <FaBars
-                className={`transition-transform duration-300 ${isOpen ? "rotate-90" : "rotate-0"}`}
+                className={`transition-transform duration-300 ${
+                  isOpen ? "rotate-90" : "rotate-0"
+                }`}
               />
             </button>
           </div>
 
+          {/* Menu Items */}
           <nav className="space-y-2">
             {menuItems.map((item, idx) => {
               const isActive = location.pathname === item.path;
-              const hasSubmenu = !!item.submenu?.length;
-
               return (
                 <div key={idx} className="relative group">
-                  <div>
-                    <Link
-                      to={item.path}
-                      className={`flex items-center gap-3 p-2 rounded-lg transition-all duration-300
-                        ${isActive ? "bg-green-500 text-white" : "hover:bg-white/30"}`}
-                      onClick={() => hasSubmenu && setAnalyzerExpanded(!analyzerExpanded)}
-                    >
-                      <span className="text-xl flex-shrink-0">{item.icon}</span>
-                      <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out
+                  <Link
+                    to={item.path}
+                    className={`flex items-center gap-3 p-2 rounded-lg transition-all duration-300 
+                      ${isActive ? "bg-green-500 text-white" : "hover:bg-white/30"}`}
+                  >
+                    <span className="text-xl flex-shrink-0">{item.icon}</span>
+                    <span
+                      className={`whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out
                         ${isOpen ? "opacity-100 w-auto" : "opacity-0 w-0"}`}
-                      >
-                        {item.name}
-                      </span>
-                    </Link>
+                    >
+                      {item.name}
+                    </span>
+                  </Link>
 
-                    {hasSubmenu && isOpen && analyzerExpanded && (
-                      <div className="ml-8 mt-1 flex flex-col space-y-1">
-                        {item.submenu.map((sub, sidx) => {
-                          const isSubActive = location.pathname === sub.path;
-                          return (
-                            <Link
-                              key={sidx}
-                              to={sub.path}
-                              className={`flex items-center gap-2 p-2 rounded-lg text-sm transition-all duration-300
-                                ${isSubActive ? "bg-green-400/30 text-white" : "hover:bg-white/20"}`}
-                            >
-                              {sub.name}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
+                  {/* Tooltip with fade + slide */}
                   {!isOpen && (
                     <span
                       className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs bg-black text-white rounded 
@@ -141,6 +123,8 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           >
             <FaSignOutAlt size={18} />
           </button>
+
+          {/* Tooltip for Logout with fade + slide */}
           {!isOpen && (
             <span
               className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 text-xs bg-black text-white rounded 
