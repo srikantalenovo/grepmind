@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Button, Input, Badge, Table, TableHead, TableBody, TableRow, TableCell } from "@/components/ui";
 import { FaSearch } from "react-icons/fa";
-import HelmReleaseDrawer from "./HelmReleaseDrawer";
+import HelmReleaseDrawer from "../components/HelmReleaseDrawer";
 import axios from "axios";
 
 export default function Helm({ namespace }) {
