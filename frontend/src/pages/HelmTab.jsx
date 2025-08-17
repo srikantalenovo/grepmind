@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import HelmReleaseDrawer from './HelmReleaseDrawer.jsx';
+import HelmReleaseDrawer from '../components/HelmReleaseDrawer';
 import { motion } from 'framer-motion';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
