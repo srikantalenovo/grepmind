@@ -28,7 +28,7 @@ router.get('/scan', rbac(['editor', 'admin']), analyzerScan);
 router.post('/:namespace/pods/:name/restart', rbac(['editor', 'admin']), restartPod);
 router.delete('/:namespace/pods/:name', rbac(['admin']), deletePod);
 
-router.post('/:namespace/:resourceType/:name/scale', rbac(['editor', 'admin']), scaleResource);
+router.post('/:namespace/:kind/:name/scale', rbac(['editor', 'admin']), scaleResource);
 router.post('/:namespace/deployments/:name/scale', rbac(['editor', 'admin']), scaleDeployment);
 
 // Generic delete (use resourceType, not kind)
