@@ -9,9 +9,16 @@ import {
   deleteResource,
   viewSecret,
   editYaml,
+  getAnalyzerDetails,
+  getAnalyzerYaml,
+  getAnalyzerEvents,  
 } from '../controllers/analyzerController.js'; //  analyzerScan, removed from list
 
 const router = express.Router();
+
+router.get('/:namespace/:resourceType/:name/details', rbac(['editor', 'admin']), getAnalyzerDetails);
+router.get('/:namespace/:resourceType/:name/yaml', rbac(['editor', 'admin']), getAnalyzerYaml);
+router.get('/:namespace/:name/events',  rbac(['editor', 'admin']), getAnalyzerEvents);
 
 // Scan endpoint (Viewer+)
 router.get('/scan', rbac(['editor', 'admin']), analyzerScan);

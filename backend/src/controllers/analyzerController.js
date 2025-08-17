@@ -231,3 +231,149 @@ export const editYaml = async (req, res) => {
     res.status(500).json({ error: 'Failed to apply YAML', details: err.body?.message || err.message });
   }
 };
+
+
+
+/**
+ * GET /api/analyzer/:namespace/:resourceType/:name/details
+ */
+export const getAnalyzerDetails = async (req, res) => {
+  const { namespace, resourceType, name } = req.params;
+
+  try {
+    let resource;
+    switch (resourceType) {
+      case 'pods':
+        resource = (await coreV1Api.readNamespacedPod(name, namespace)).body;
+        break;
+      case 'services':
+        resource = (await coreV1Api.readNamespacedService(name, namespace)).body;
+        break;
+      case 'deployments':
+        resource = (await appsV1Api.readNamespacedDeployment(name, namespace)).body;
+        break;
+      case 'statefulsets':
+        resource = (await appsV1Api.readNamespacedStatefulSet(name, namespace)).body;
+        break;
+      case 'daemonsets':
+        resource = (await appsV1Api.readNamespacedDaemonSet(name, namespace)).body;
+        break;
+      case 'jobs':
+        resource = (await batchV1Api.readNamespacedJob(name, namespace)).body;
+        break;
+      case 'cronjobs':
+        resource = (await batchV1Api.readNamespacedCronJob(name, namespace)).body;
+        break;
+      case 'persistentvolumeclaims':
+        resource = (await coreV1Api.readNamespacedPersistentVolumeClaim(name, namespace)).body;
+        break;
+      case 'configmaps':
+        resource = (await coreV1Api.readNamespacedConfigMap(name, namespace)).body;
+        break;
+      case 'secrets':
+        resource = (await coreV1Api.readNamespacedSecret(name, namespace)).body;
+        break;
+      case 'ingresses':
+        resource = (await networkingV1Api.getNamespacedCustomObject(
+          'networking.k8s.io', 'v1', namespace, 'ingresses', name
+        )).body;
+        break;
+      default:
+        return res.status(400).json({ error: `Unsupported resource type: ${resourceType}` });
+    }
+
+    res.json({
+      kind: resource.kind,
+      metadata: resource.metadata,
+      spec: resource.spec,
+      status: resource.status,
+    });
+  } catch (err) {
+    console.error(`[ERROR] Analyzer getDetails ${resourceType}/${name}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch resource details: ${err.message}` });
+  }
+};
+
+/**
+ * GET /api/analyzer/:namespace/:resourceType/:name/yaml
+ */
+export const getAnalyzerYaml = async (req, res) => {
+  const { namespace, resourceType, name } = req.params;
+
+  try {
+    // reuse same switch above
+    // (extract into helper if you want)
+    let resource;
+    switch (resourceType) {
+      case 'pods':
+        resource = (await coreV1Api.readNamespacedPod(name, namespace)).body;
+        break;
+      case 'services':
+        resource = (await coreV1Api.readNamespacedService(name, namespace)).body;
+        break;
+      case 'deployments':
+        resource = (await appsV1Api.readNamespacedDeployment(name, namespace)).body;
+        break;
+      // ... repeat cases from getAnalyzerDetails
+      case 'statefulsets':
+        resource = (await appsV1Api.readNamespacedStatefulSet(name, namespace)).body;
+        break;
+      case 'daemonsets':
+        resource = (await appsV1Api.readNamespacedDaemonSet(name, namespace)).body;
+        break;
+      case 'jobs':
+        resource = (await batchV1Api.readNamespacedJob(name, namespace)).body;
+        break;
+      case 'cronjobs':
+        resource = (await batchV1Api.readNamespacedCronJob(name, namespace)).body;
+        break;
+      case 'persistentvolumeclaims':
+        resource = (await coreV1Api.readNamespacedPersistentVolumeClaim(name, namespace)).body;
+        break;
+      case 'configmaps':
+        resource = (await coreV1Api.readNamespacedConfigMap(name, namespace)).body;
+        break;
+      case 'secrets':
+        resource = (await coreV1Api.readNamespacedSecret(name, namespace)).body;
+        break;
+      case 'ingresses':
+        resource = (await networkingV1Api.getNamespacedCustomObject(
+          'networking.k8s.io', 'v1', namespace, 'ingresses', name
+        )).body;
+        break;
+      default:      
+        return res.status(400).json({ error: `Unsupported resource type: ${resourceType}` });
+    }
+
+    const yamlData = yaml.dump(resource);
+    res.setHeader('Content-Type', 'text/yaml');
+    res.send(yamlData);
+  } catch (err) {
+    console.error(`[ERROR] Analyzer getYaml ${resourceType}/${name}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch resource YAML: ${err.message}` });
+  }
+};
+
+/**
+ * GET /api/analyzer/:namespace/:name/events
+ */
+export const getAnalyzerEvents = async (req, res) => {
+  const { namespace, name } = req.params;
+
+  try {
+    const events = (await coreV1Api.listNamespacedEvent(namespace)).body.items
+      .filter(ev => ev.involvedObject?.name === name)
+      .map(ev => ({
+        type: ev.type,
+        reason: ev.reason,
+        message: ev.message,
+        firstTimestamp: ev.firstTimestamp,
+        lastTimestamp: ev.lastTimestamp,
+      }));
+
+    res.json(events);
+  } catch (err) {
+    console.error(`[ERROR] Analyzer getEvents ${name}:`, err.message);
+    res.status(500).json({ error: `Failed to fetch events: ${err.message}` });
+  }
+};
