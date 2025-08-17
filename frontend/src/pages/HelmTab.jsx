@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import HelmReleaseDrawer from '../components/HelmReleaseDrawer';
-import { motion } from 'framer-motion';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
@@ -28,111 +27,112 @@ async function apiFetch(path, opts = {}, role = 'editor') {
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-async function fetchNamespaces(role = 'editor') {
-  return apiFetch('/api/cluster/namespaces', {}, role);
-}
-
 export default function HelmTab() {
-  const [releases, setReleases] = useState([]);
   const [namespaces, setNamespaces] = useState([]);
   const [selectedNamespace, setSelectedNamespace] = useState('all');
+  const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [drawerRelease, setDrawerRelease] = useState(null);
+  const [selectedRelease, setSelectedRelease] = useState(null);
+  const [role, setRole] = useState('editor'); // can be dynamically set
 
-  const loadNamespaces = async () => {
+  // ---------- Fetch all namespaces ----------
+  const loadNamespaces = useCallback(async () => {
     try {
-      const ns = await fetchNamespaces();
-      setNamespaces(['all', ...ns]);
+      const data = await apiFetch('/api/cluster/namespaces', {}, role);
+      setNamespaces(['all', ...data.namespaces]);
     } catch (err) {
-      console.error('Failed to fetch namespaces:', err);
+      console.error('Failed to load namespaces', err);
+      setNamespaces(['all']);
     }
-  };
+  }, [role]);
 
+  // ---------- Fetch releases ----------
   const loadReleases = useCallback(async () => {
     setLoading(true);
     try {
-      const nsQuery = selectedNamespace === 'all' ? 'all' : selectedNamespace;
-      const data = await apiFetch(`/api/helm/releases?namespace=${nsQuery}`);
+      const data = await apiFetch(`/api/helm/releases?namespace=${selectedNamespace}`, {}, role);
+      console.log('Helm API response:', data); // debug
       setReleases(data.releases || []);
     } catch (err) {
-      console.error('Failed to fetch Helm releases:', err);
+      console.error('Failed to load Helm releases', err);
       setReleases([]);
     } finally {
       setLoading(false);
     }
-  }, [selectedNamespace]);
+  }, [selectedNamespace, role]);
 
-  useEffect(() => { loadNamespaces(); }, []);
-  useEffect(() => { loadReleases(); }, [loadReleases]);
-
-  // Auto-refresh every 30 minutes
+  // ---------- Auto-refresh every 30 minutes ----------
   useEffect(() => {
-    const interval = setInterval(() => { loadReleases(); }, 30 * 60 * 1000);
+    loadNamespaces();
+  }, [loadNamespaces]);
+
+  useEffect(() => {
+    loadReleases();
+    const interval = setInterval(loadReleases, 30 * 60 * 1000);
     return () => clearInterval(interval);
   }, [loadReleases]);
 
+  // ---------- Render ----------
   return (
     <div className="p-4">
-      <div className="flex justify-between mb-2 items-center">
-        <div>
-          <label className="mr-2 font-semibold">Namespace:</label>
-          <select
-            className="border rounded px-2 py-1"
-            value={selectedNamespace}
-            onChange={e => setSelectedNamespace(e.target.value)}
-          >
-            {namespaces.map(ns => <option key={ns} value={ns}>{ns}</option>)}
-          </select>
-        </div>
+      <div className="flex justify-between mb-3">
+        <select
+          className="border rounded px-2 py-1"
+          value={selectedNamespace}
+          onChange={e => setSelectedNamespace(e.target.value)}
+        >
+          {namespaces.map(ns => <option key={ns} value={ns}>{ns}</option>)}
+        </select>
         <button
-          className="bg-indigo-600 text-white px-3 py-1 rounded"
+          className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition"
           onClick={loadReleases}
         >
           Refresh
         </button>
       </div>
 
-      <div className="overflow-auto rounded-lg shadow border">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-indigo-600 text-white rounded-t-lg">
+      <div className="overflow-auto rounded shadow border">
+        <table className="min-w-full border-collapse">
+          <thead className="bg-indigo-600 text-white rounded-t">
             <tr>
-              <th className="px-4 py-2 rounded-tl-lg">Name</th>
-              <th className="px-4 py-2">Namespace</th>
-              <th className="px-4 py-2">Chart</th>
-              <th className="px-4 py-2">Version</th>
-              <th className="px-4 py-2 rounded-tr-lg">Status</th>
+              <th className="px-4 py-2 text-left rounded-tl">Name</th>
+              <th className="px-4 py-2 text-left">Namespace</th>
+              <th className="px-4 py-2 text-left">Chart</th>
+              <th className="px-4 py-2 text-left">Version</th>
+              <th className="px-4 py-2 text-left rounded-tr">Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="5" className="px-4 py-2 text-center">Loading…</td></tr>
+              <tr><td colSpan={5} className="text-center p-4">Loading releases…</td></tr>
             ) : releases.length === 0 ? (
-              <tr><td colSpan="5" className="px-4 py-2 text-center">No releases found</td></tr>
-            ) : releases.map(rel => (
-              <motion.tr
-                key={`${rel.namespace}-${rel.name}`}
-                className="cursor-pointer hover:bg-indigo-50"
-                onClick={() => setDrawerRelease(rel)}
-                whileHover={{ scale: 1.01 }}
-                transition={{ type: 'spring', stiffness: 300 }}
-              >
-                <td className="px-4 py-2">{rel.name}</td>
-                <td className="px-4 py-2">{rel.namespace}</td>
-                <td className="px-4 py-2">{rel.chart}</td>
-                <td className="px-4 py-2">{rel.version}</td>
-                <td className="px-4 py-2">{rel.status}</td>
-              </motion.tr>
-            ))}
+              <tr><td colSpan={5} className="text-center p-4">No releases found</td></tr>
+            ) : (
+              releases.map(rel => (
+                <tr
+                  key={`${rel.namespace}-${rel.name}`}
+                  className="hover:bg-indigo-50 cursor-pointer transition"
+                  onClick={() => setSelectedRelease(rel)}
+                >
+                  <td className="px-4 py-2">{rel.name}</td>
+                  <td className="px-4 py-2">{rel.namespace}</td>
+                  <td className="px-4 py-2">{rel.chart?.name || '-'}</td>
+                  <td className="px-4 py-2">{rel.chart?.version || '-'}</td>
+                  <td className="px-4 py-2">{rel.status}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {drawerRelease && (
+      {selectedRelease && (
         <HelmReleaseDrawer
-          open={!!drawerRelease}
-          release={drawerRelease}
-          onClose={() => setDrawerRelease(null)}
+          open={Boolean(selectedRelease)}
+          release={selectedRelease}
+          onClose={() => setSelectedRelease(null)}
           onActionDone={loadReleases}
+          role={role}
         />
       )}
     </div>
