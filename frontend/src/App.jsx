@@ -19,7 +19,7 @@ import Unauthorized from "./pages/Unauthorized";
 
 function App() {
   return (
-    <AuthProvider>
+
       <Router>
         <Routes>
           {/* Public routes */}
@@ -74,7 +74,7 @@ function App() {
           </Route>
         </Routes>
       </Router>
-    </AuthProvider>
+
   );
 }
 
