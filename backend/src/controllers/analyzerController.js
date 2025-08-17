@@ -32,37 +32,33 @@ export const analyzerScan = async (req, res) => {
 
 // ---------- ACTIONS ----------
 
-// POST /analyzer/:ns/pods/:name/restart  (Editor+)
+// POST /analyzer/:namespace/pods/:name/restart  (Editor+)
 export const restartPod = async (req, res) => {
-  const { ns, name } = req.params;
+  const { namespace, name } = req.params;
   try {
-    await coreV1Api.deleteNamespacedPod(name, ns);
+    await coreV1Api.deleteNamespacedPod(name, namespace);
     res.json({ ok: true, message: `Pod ${name} deleted; controller will restart it.` });
   } catch (err) {
-    console.error(`[ERROR] restartPod ${ns}/${name}:`, err.body?.message || err.message);
+    console.error(`[ERROR] restartPod ${namespace}/${name}:`, err.body?.message || err.message);
     res.status(500).json({ error: 'Failed to restart pod', details: err.body?.message || err.message });
   }
 };
 
-// DELETE /analyzer/:ns/pods/:name  (Admin)
+// DELETE /analyzer/:namespace/pods/:name  (Admin)
 export const deletePod = async (req, res) => {
-  const { ns, name } = req.params;
+  const { namespace, name } = req.params;
   try {
-    await coreV1Api.deleteNamespacedPod(name, ns);
+    await coreV1Api.deleteNamespacedPod(name, namespace);
     res.json({ ok: true, message: `Pod ${name} deleted.` });
   } catch (err) {
-    console.error(`[ERROR] deletePod ${ns}/${name}:`, err.body?.message || err.message);
+    console.error(`[ERROR] deletePod ${namespace}/${name}:`, err.body?.message || err.message);
     res.status(500).json({ error: 'Failed to delete pod', details: err.body?.message || err.message });
   }
 };
 
 export const scaleDeployment = async (req, res) => {
-  const { ns, name } = req.params;
+  const { namespace, name } = req.params;  // ✅ fix: use namespace (not ns)
   let replicas = req.body?.replicas ?? req.body?.spec?.replicas;
-
-  if (!ns) {
-    return res.status(400).json({ error: 'Namespace is required in the path' });
-  }
 
   try {
     replicas = parseInt(replicas, 10);
@@ -70,12 +66,11 @@ export const scaleDeployment = async (req, res) => {
       return res.status(400).json({ error: 'Invalid replicas value' });
     }
 
-    console.log(`Scaling deployment ${ns}/${name} to ${replicas} replicas`);
-
     const patch = { spec: { replicas } };
+
     const resp = await appsV1Api.patchNamespacedDeployment(
       name,
-      ns,
+      namespace,
       patch,
       undefined, undefined, undefined, undefined,
       { headers: { 'Content-Type': 'application/merge-patch+json' } }
@@ -87,7 +82,7 @@ export const scaleDeployment = async (req, res) => {
       deployment: resp.body
     });
   } catch (err) {
-    console.error(`[ERROR] scaleDeployment ${ns}/${name}:`, err.body?.message || err.message);
+    console.error(`[ERROR] scaleDeployment ${namespace}/${name}:`, err.body?.message || err.message);
     res.status(500).json({
       error: 'Failed to scale deployment',
       details: err.body?.message || err.message
@@ -96,71 +91,71 @@ export const scaleDeployment = async (req, res) => {
 };
 
 
-// DELETE /analyzer/:ns/:kind/:name  (Admin)
+// DELETE /analyzer/:namespace/:kind/:name  (Admin)
 export const deleteResource = async (req, res) => {
-  const { ns, kind, name } = req.params;
+  const { namespace, kind, name } = req.params;
   try {
     const k = kind.toLowerCase();
     switch (k) {
       case 'pods':
       case 'pod':
-        await coreV1Api.deleteNamespacedPod(name, ns);
+        await coreV1Api.deleteNamespacedPod(name, namespace);
         break;
       case 'services':
       case 'service':
-        await coreV1Api.deleteNamespacedService(name, ns);
+        await coreV1Api.deleteNamespacedService(name, namespace);
         break;
       case 'configmaps':
       case 'configmap':
-        await coreV1Api.deleteNamespacedConfigMap(name, ns);
+        await coreV1Api.deleteNamespacedConfigMap(name, namespace);
         break;
       case 'secrets':
       case 'secret':
-        await coreV1Api.deleteNamespacedSecret(name, ns);
+        await coreV1Api.deleteNamespacedSecret(name, namespace);
         break;
       case 'persistentvolumeclaims':
       case 'pvc':
-        await coreV1Api.deleteNamespacedPersistentVolumeClaim(name, ns);
+        await coreV1Api.deleteNamespacedPersistentVolumeClaim(name, namespace);
         break;
       case 'deployments':
       case 'deployment':
-        await appsV1Api.deleteNamespacedDeployment(name, ns);
+        await appsV1Api.deleteNamespacedDeployment(name, namespace);
         break;
       case 'statefulsets':
       case 'statefulset':
-        await appsV1Api.deleteNamespacedStatefulSet(name, ns);
+        await appsV1Api.deleteNamespacedStatefulSet(name, namespace);
         break;
       case 'daemonsets':
       case 'daemonset':
-        await appsV1Api.deleteNamespacedDaemonSet(name, ns);
+        await appsV1Api.deleteNamespacedDaemonSet(name, namespace);
         break;
       case 'jobs':
       case 'job':
-        await batchV1Api.deleteNamespacedJob(name, ns);
+        await batchV1Api.deleteNamespacedJob(name, namespace);
         break;
       case 'cronjobs':
       case 'cronjob':
-        await batchV1Api.deleteNamespacedCronJob(name, ns);
+        await batchV1Api.deleteNamespacedCronJob(name, namespace);
         break;
       case 'ingress':
       case 'ingresses':
-        await networkingV1Api.deleteNamespacedIngress(name, ns);
+        await networkingV1Api.deleteNamespacedIngress(name, namespace);
         break;
       default:
         return res.status(400).json({ error: `Unsupported kind for delete: ${kind}` });
     }
     res.json({ ok: true, message: `${kind} ${name} deleted.` });
   } catch (err) {
-    console.error(`[ERROR] deleteResource ${ns}/${kind}/${name}:`, err.body?.message || err.message);
+    console.error(`[ERROR] deleteResource ${namespace}/${kind}/${name}:`, err.body?.message || err.message);
     res.status(500).json({ error: `Failed to delete ${kind}`, details: err.body?.message || err.message });
   }
 };
 
-// GET /analyzer/:ns/secrets/:name/view  (Admin)
+// GET /analyzer/:namespace/secrets/:name/view  (Admin)
 export const viewSecret = async (req, res) => {
-  const { ns, name } = req.params;
+  const { namespace, name } = req.params;
   try {
-    const sec = (await coreV1Api.readNamespacedSecret(name, ns)).body;
+    const sec = (await coreV1Api.readNamespacedSecret(name, namespace)).body;
     const data = sec.data || {};
     const decoded = {};
     // decode base64 -> utf8 (best-effort)
@@ -176,14 +171,14 @@ export const viewSecret = async (req, res) => {
       data: decoded,
     });
   } catch (err) {
-    console.error(`[ERROR] viewSecret ${ns}/${name}:`, err.body?.message || err.message);
+    console.error(`[ERROR] viewSecret ${namespace}/${name}:`, err.body?.message || err.message);
     res.status(500).json({ error: 'Failed to view secret', details: err.body?.message || err.message });
   }
 };
 
-// PUT /analyzer/:ns/:kind/:name/edit  { yaml } (Admin)
+// PUT /analyzer/:namespace/:kind/:name/edit  { yaml } (Admin)
 export const editYaml = async (req, res) => {
-  const { ns, kind, name } = req.params;
+  const { namespace, kind, name } = req.params;
   const { yaml: yamlText } = req.body || {};
   if (!yamlText || typeof yamlText !== 'string') {
     return res.status(400).json({ error: 'yaml is required in body' });
@@ -198,13 +193,13 @@ export const editYaml = async (req, res) => {
     }
     const yKind = obj.kind.toLowerCase();
     const yName = obj.metadata.name;
-    const yNs = obj.metadata?.namespace || ns;
+    const yNs = obj.metadata?.namespace || namespace;
 
     if (yName !== name) {
       return res.status(400).json({ error: `YAML name (${yName}) does not match path param (${name})` });
     }
-    if (yNs !== ns) {
-      return res.status(400).json({ error: `YAML namespace (${yNs}) does not match path param (${ns})` });
+    if (yNs !== namespace) {
+      return res.status(400).json({ error: `YAML namespace (${yNs}) does not match path param (${namespace})` });
     }
     if (yKind !== kind.toLowerCase() && !(kind.toLowerCase() === 'pvc' && yKind === 'persistentvolumeclaim')) {
       return res.status(400).json({ error: `YAML kind (${obj.kind}) does not match path kind (${kind})` });
@@ -213,32 +208,32 @@ export const editYaml = async (req, res) => {
     // Use replace for full object updates
     switch (yKind) {
       case 'pod':
-        return res.json((await coreV1Api.replaceNamespacedPod(name, ns, obj)).body);
+        return res.json((await coreV1Api.replaceNamespacedPod(name, namespace, obj)).body);
       case 'service':
-        return res.json((await coreV1Api.replaceNamespacedService(name, ns, obj)).body);
+        return res.json((await coreV1Api.replaceNamespacedService(name, namespace, obj)).body);
       case 'configmap':
-        return res.json((await coreV1Api.replaceNamespacedConfigMap(name, ns, obj)).body);
+        return res.json((await coreV1Api.replaceNamespacedConfigMap(name, namespace, obj)).body);
       case 'secret':
-        return res.json((await coreV1Api.replaceNamespacedSecret(name, ns, obj)).body);
+        return res.json((await coreV1Api.replaceNamespacedSecret(name, namespace, obj)).body);
       case 'persistentvolumeclaim':
-        return res.json((await coreV1Api.replaceNamespacedPersistentVolumeClaim(name, ns, obj)).body);
+        return res.json((await coreV1Api.replaceNamespacedPersistentVolumeClaim(name, namespace, obj)).body);
       case 'deployment':
-        return res.json((await appsV1Api.replaceNamespacedDeployment(name, ns, obj)).body);
+        return res.json((await appsV1Api.replaceNamespacedDeployment(name, namespace, obj)).body);
       case 'statefulset':
-        return res.json((await appsV1Api.replaceNamespacedStatefulSet(name, ns, obj)).body);
+        return res.json((await appsV1Api.replaceNamespacedStatefulSet(name, namespace, obj)).body);
       case 'daemonset':
-        return res.json((await appsV1Api.replaceNamespacedDaemonSet(name, ns, obj)).body);
+        return res.json((await appsV1Api.replaceNamespacedDaemonSet(name, namespace, obj)).body);
       case 'job':
-        return res.json((await batchV1Api.replaceNamespacedJob(name, ns, obj)).body);
+        return res.json((await batchV1Api.replaceNamespacedJob(name, namespace, obj)).body);
       case 'cronjob':
-        return res.json((await batchV1Api.replaceNamespacedCronJob(name, ns, obj)).body);
+        return res.json((await batchV1Api.replaceNamespacedCronJob(name, namespace, obj)).body);
       case 'ingress':
-        return res.json((await networkingV1Api.replaceNamespacedIngress(name, ns, obj)).body);
+        return res.json((await networkingV1Api.replaceNamespacedIngress(name, namespace, obj)).body);
       default:
         return res.status(400).json({ error: `Unsupported kind for edit: ${obj.kind}` });
     }
   } catch (err) {
-    console.error(`[ERROR] editYaml ${ns}/${kind}/${name}:`, err.body?.message || err.message);
+    console.error(`[ERROR] editYaml ${namespace}/${kind}/${name}:`, err.body?.message || err.message);
     res.status(500).json({ error: 'Failed to apply YAML', details: err.body?.message || err.message });
   }
 };
