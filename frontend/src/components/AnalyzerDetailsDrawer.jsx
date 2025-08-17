@@ -145,6 +145,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
 
 const doScale = async () => {
   const replicas = parseInt(scaleDraft, 10);
+  const ns = resource.namespace || 'default';
   if (Number.isNaN(replicas) || replicas < 0) {
     alert('Please enter a valid non-negative integer for replicas.');
     return;
@@ -153,7 +154,7 @@ const doScale = async () => {
   try {
     // always scale Deployments (plural lowercase for API path)
     await apiFetch(
-      `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`,
+      `/api/analyzer/${ns}/deployments/${resource.name}/scale`,
       {
         method: 'POST',
         headers: {
@@ -183,6 +184,7 @@ const doApplyYaml = async () => {
     }
 
     // Parse YAML
+    const ns = resource.namespace || 'default';
     const parsed = YAML.parse(yamlText);
     const yamlKind = parsed?.kind;
     if (!yamlKind) {
@@ -201,7 +203,7 @@ const doApplyYaml = async () => {
 
     // Call edit endpoint
     await apiFetch(
-      `/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/edit`,
+      `/api/analyzer/${ns}/${apiType}/${resource.name}/edit`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
