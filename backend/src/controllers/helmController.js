@@ -18,7 +18,7 @@ function helmExec(cmd) {
 export async function getHelmReleases(req, res) {
   const namespace = req.query.namespace || 'default';
   try {
-    const items = await helmExec(`helm list -n ${namespace} -o json`);
+    const cmd = `helm list --all-namespaces --output json`;
     res.json({ items });
   } catch (err) {
     res.status(500).json({ error: err.toString() });
