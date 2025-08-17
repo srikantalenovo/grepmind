@@ -1,61 +1,41 @@
-// src/routes/analyzerRoutes.js
 import express from 'express';
-import { rbac } from '../middleware/rbacMiddleware.js';
+import { rbac } from '../middleware/rbac.js';
 import {
+  getAnalyzerDetails,
+  getAnalyzerYaml,
+  getAnalyzerEvents,
   analyzerScan,
   restartPod,
   deletePod,
   scaleDeployment,
   deleteResource,
   viewSecret,
-  editYaml,
-  getAnalyzerDetails,
-  getAnalyzerYaml,
-  getAnalyzerEvents,  
-} from '../controllers/analyzerController.js'; //  analyzerScan, removed from list
+  editYaml
+} from '../controllers/analyzerController.js';
 
 const router = express.Router();
 
+// Resource inspection
 router.get('/:namespace/:resourceType/:name/details', rbac(['editor', 'admin']), getAnalyzerDetails);
 router.get('/:namespace/:resourceType/:name/yaml', rbac(['editor', 'admin']), getAnalyzerYaml);
-router.get('/:namespace/:name/events',  rbac(['editor', 'admin']), getAnalyzerEvents);
+router.get('/:namespace/:resourceType/:name/events', rbac(['editor', 'admin']), getAnalyzerEvents);
 
 // Scan endpoint (Viewer+)
 router.get('/scan', rbac(['editor', 'admin']), analyzerScan);
 
 // Actions (RBAC)
-router.post('/:ns/pods/:name/restart', rbac(['editor', 'admin']), restartPod);
-router.delete('/:ns/pods/:name', rbac(['admin']), deletePod);
+router.post('/:namespace/pods/:name/restart', rbac(['editor', 'admin']), restartPod);
+router.delete('/:namespace/pods/:name', rbac(['admin']), deletePod);
 
-router.post('/:ns/deployments/:name/scale', rbac(['editor', 'admin']), scaleDeployment);
+router.post('/:namespace/deployments/:name/scale', rbac(['editor', 'admin']), scaleDeployment);
 
-// Generic delete
-router.delete('/:ns/:kind/:name', rbac(['admin']), deleteResource);
+// Generic delete (use resourceType, not kind)
+router.delete('/:namespace/:resourceType/:name', rbac(['admin']), deleteResource);
 
 // Secrets view
-router.get('/:ns/secrets/:name/view', rbac(['admin']), viewSecret);
+router.get('/:namespace/secrets/:name/view', rbac(['admin']), viewSecret);
 
 // YAML edit/apply
-router.put('/:ns/:kind/:name/edit', rbac(['admin']), editYaml);
-
-
-// router.get('/scan', rbac('viewer'), async (req, res) => {
-//   try {
-//     const { namespace, resourceType, search, problemsOnly } = req.query;
-
-//     const items = await scanResources({
-//       namespace: namespace || 'all',
-//       resourceType: resourceType || 'all',
-//       search: search || '',
-//       problemsOnly: problemsOnly === 'true',
-//     });
-
-//     res.json(items);
-//   } catch (err) {
-//     console.error('[ERROR] analyzer scan failed', err);
-//     res.status(500).json({ error: err.message });
-//   }
-// });
+router.put('/:namespace/:resourceType/:name/edit', rbac(['admin']), editYaml);
 
 export default router;
-

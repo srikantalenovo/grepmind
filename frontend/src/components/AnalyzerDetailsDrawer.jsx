@@ -100,9 +100,9 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
     (async () => {
       try {
         const [details, yamlRes, evs] = await Promise.all([
-          apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/details`, {}, role),
-          apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/yaml`, {}, role),
-          apiFetch(`/api/analyzer/${resource.namespace}/${resource.name}/events`, {}, role),
+            apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/details`, {}, role),
+            apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/yaml`, {}, role),
+            apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/events`, {}, role),
         ]);
         setMeta(details);
         setYamlText(typeof yamlRes === 'string' ? yamlRes : '');
@@ -137,9 +137,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
 
   const doDelete = async () => {
     if (!confirm(`Delete ${resource.type} ${resource.name}? This cannot be undone.`)) return;
-    const path = resource.type === 'Pod'
-      ? `/api/analyzer/${resource.namespace}/pods/${resource.name}`
-      : `/api/analyzer/${resource.namespace}/${kind}/${resource.name}`;
+    const path = `/api/analyzer/${resource.namespace}/${apiType}/${resource.name}`;
     await apiFetch(path, { method: 'DELETE' }, role);
     onActionDone?.();
     onClose();
