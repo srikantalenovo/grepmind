@@ -4,7 +4,7 @@ import AnalyzerDetailsDrawer from '../components/AnalyzerDetailsDrawer.jsx';
 import { AuthContext } from '../context/AuthContext';
 
 // HELM: Import HelmTab
-import HelmTab from '../components/helm/HelmTab.jsx';
+import HelmTab from '../pages/HelmTab.jsx';
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''; // e.g. ''
 
