@@ -58,7 +58,7 @@ export const deletePod = async (req, res) => {
 
 export const scaleDeployment = async (req, res) => {
   const { namespace, name } = req.params;
-  let { replicas } = req.body;
+  let replicas = req.body?.replicas ?? req.body?.spec?.replicas;
 
   try {
     replicas = parseInt(replicas, 10);
@@ -178,7 +178,7 @@ export const viewSecret = async (req, res) => {
 
 // PUT /analyzer/:namespace/:kind/:name/edit  { yaml } (Admin)
 export const editYaml = async (req, res) => {
-  const { namespace, kind, name } = req.params;
+  const { namespace, resourceType, name } = req.params;
   const { yaml: yamlText } = req.body || {};
 
   if (!yamlText || typeof yamlText !== 'string') {
@@ -196,7 +196,7 @@ export const editYaml = async (req, res) => {
 
     // Normalize kinds: plural in path vs singular in YAML
     const yKind = obj.kind.toLowerCase();            // from YAML
-    const pKind = (kind || '').toLowerCase();        // from path (may be plural like "deployments")
+    const pKind = (resourceType || '').toLowerCase();        // from path (may be plural like "deployments")
     const yName = obj.metadata.name;
     const yNs = obj.metadata?.namespace || namespace;
 
@@ -213,29 +213,32 @@ export const editYaml = async (req, res) => {
         error: `YAML namespace (${yNs}) does not match path param (${namespace})`
       });
     }
-
-    // Map plural → singular for comparison
-    const pluralToSingular = {
-      pods: 'pod',
-      services: 'service',
-      configmaps: 'configmap',
-      secrets: 'secret',
-      pvcs: 'persistentvolumeclaim',
-      deployments: 'deployment',
-      statefulsets: 'statefulset',
-      daemonsets: 'daemonset',
-      jobs: 'job',
-      cronjobs: 'cronjob',
-      ingresses: 'ingress',
-    };
-
-    const expectedKind = pluralToSingular[pKind] || pKind; // normalize
-
-    if (yKind !== expectedKind) {
-      return res.status(400).json({
-        error: `YAML kind (${obj.kind}) does not match path kind (${kind})`
-      });
+    
+    if (yKind !== pKind && !(pKind === 'pvc' && yKind === 'persistentvolumeclaim')) {
+      return res.status(400).json({ error: `YAML kind (${obj.kind}) does not match path kind (${resourceType})` });
     }
+    // // Map plural → singular for comparison
+    // const pluralToSingular = {
+    //   pods: 'pod',
+    //   services: 'service',
+    //   configmaps: 'configmap',
+    //   secrets: 'secret',
+    //   pvcs: 'persistentvolumeclaim',
+    //   deployments: 'deployment',
+    //   statefulsets: 'statefulset',
+    //   daemonsets: 'daemonset',
+    //   jobs: 'job',
+    //   cronjobs: 'cronjob',
+    //   ingresses: 'ingress',
+    // };
+
+    // const expectedKind = pluralToSingular[pKind] || pKind; // normalize
+
+    // if (yKind !== expectedKind) {
+    //   return res.status(400).json({
+    //     error: `YAML kind (${obj.kind}) does not match path kind (${kind})`
+    //   });
+    // }
 
     // ✅ Use replace for full updates
     switch (yKind) {

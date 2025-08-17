@@ -47,30 +47,24 @@ async function apiFetch(path, opts = {}, role = 'editor') {
 function mapTypeKeys(displayType) {
   const t = (displayType || '').toLowerCase();
   switch (t) {
-    case 'pod':
-      return { apiType: 'pods', kind: 'Pod' };
-    case 'deployment':
-      return { apiType: 'deployments', kind: 'Deployment' };
-    case 'statefulset':
-      return { apiType: 'statefulsets', kind: 'StatefulSet' };
-    case 'daemonset':
-      return { apiType: 'daemonsets', kind: 'DaemonSet' };
-    case 'job':
-      return { apiType: 'jobs', kind: 'Job' };
-    case 'cronjob':
-      return { apiType: 'cronjobs', kind: 'CronJob' };
-    case 'service':
-      return { apiType: 'services', kind: 'Service' };
-    case 'ingress':
-      return { apiType: 'ingresses', kind: 'Ingress' }; // ✅ fixed
-    case 'configmap':
-      return { apiType: 'configmaps', kind: 'ConfigMap' };
-    case 'secret':
-      return { apiType: 'secrets', kind: 'Secret' };
+    case 'pod': return { apiType: 'pods', kind: 'Pod' };
+    case 'deployment': return { apiType: 'deployments', kind: 'Deployment' };
+    case 'statefulset': return { apiType: 'statefulsets', kind: 'StatefulSet' };
+    case 'daemonset': return { apiType: 'daemonsets', kind: 'DaemonSet' };
+    case 'job': return { apiType: 'jobs', kind: 'Job' };
+    case 'cronjob': return { apiType: 'cronjobs', kind: 'CronJob' };
+    case 'service': return { apiType: 'services', kind: 'Service' };
+    case 'ingress': return { apiType: 'ingresses', kind: 'Ingress' };
+    case 'configmap': return { apiType: 'configmaps', kind: 'ConfigMap' };
+    case 'secret': return { apiType: 'secrets', kind: 'Secret' };
     case 'persistentvolumeclaim':
       return { apiType: 'persistentvolumeclaims', kind: 'PersistentVolumeClaim' };
+    // Optional RBAC objects
+    case 'role': return { apiType: 'roles', kind: 'Role' };
+    case 'rolebinding': return { apiType: 'rolebindings', kind: 'RoleBinding' };
+    case 'clusterrole': return { apiType: 'clusterroles', kind: 'ClusterRole' };
+    case 'clusterrolebinding': return { apiType: 'clusterrolebindings', kind: 'ClusterRoleBinding' };
     default:
-      // fallback: Capitalize singular + plural lowercase
       return {
         apiType: t + 's',
         kind: t.charAt(0).toUpperCase() + t.slice(1),
@@ -156,7 +150,7 @@ const doScale = async () => {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ replicas })   // ✅ always send simple { replicas }
+        body: JSON.stringify({ replicas: Number(scaleDraft) })  // ✅ always send simple { replicas }
       },
       role
     );
