@@ -3,13 +3,21 @@ import HelmReleaseDrawer from '../components/HelmReleaseDrawer';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-async function apiFetch(path, opts={}) {
+async function apiFetch(path, opts = {}, role = 'editor') {
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
-    headers: { 'Content-Type': 'application/json' }
+    headers: {
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+      'x-user-role': role, // RBAC header
+    },
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
+  }
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('application/json') ? res.json() : res.text();
 }
 
 export default function HelmTab({ namespace }) {
