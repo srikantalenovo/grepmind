@@ -8,6 +8,25 @@ import {
 } from '../config/k8sClient.js';
 import { scanResources } from '../services/analyzerService.js';
 
+// helper: plural resourceType in URL -> singular kind
+const toSingularKind = (rt = '') => {
+  const k = String(rt).toLowerCase();
+  const map = {
+    pods: 'pod',
+    services: 'service',
+    configmaps: 'configmap',
+    secrets: 'secret',
+    persistentvolumeclaims: 'persistentvolumeclaim',
+    deployments: 'deployment',
+    statefulsets: 'statefulset',
+    daemonsets: 'daemonset',
+    jobs: 'job',
+    cronjobs: 'cronjob',
+    ingresses: 'ingress',
+  };
+  return map[k] || k.replace(/s$/, '');
+};
+
 // ---------- SCAN ----------
 export const analyzerScan = async (req, res) => {
   const namespace = (req.query.namespace ?? 'all').trim() || 'all';
@@ -56,44 +75,37 @@ export const deletePod = async (req, res) => {
   }
 };
 
+// POST /analyzer/:namespace/deployments/:name/scale
 export const scaleDeployment = async (req, res) => {
   try {
     const { namespace, name } = req.params;
-    const { replicas } = req.body;
-
-    if (replicas === undefined || replicas === null || isNaN(Number(replicas))) {
+    let { replicas } = req.body || {};
+    replicas = Number(replicas);
+    if (!Number.isInteger(replicas) || replicas < 0) {
       return res.status(400).json({ error: 'Invalid replicas value' });
     }
 
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault();
-    const appsV1 = kc.makeApiClient(k8s.AppsV1Api);
+    const patch = { spec: { replicas } };
 
-    // Patch replicas
-    const patch = { spec: { replicas: Number(replicas) } };
-
-    const result = await appsV1.patchNamespacedDeploymentScale(
+    // Use JSON Merge Patch to avoid 415
+    const resp = await appsV1Api.patchNamespacedDeployment(
       name,
       namespace,
       patch,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        headers: { 'Content-Type': 'application/merge-patch+json' }, // ✅ important for avoiding 415
-      }
+      undefined, undefined, undefined, undefined,
+      { headers: { 'Content-Type': 'application/merge-patch+json' } }
     );
 
-    res.json({ success: true, replicas: result.body.spec.replicas });
+    res.json({ ok: true, replicas: resp.body?.spec?.replicas ?? replicas });
   } catch (err) {
-    console.error('Scale error:', err.response?.body || err.message);
+    console.error('[ERROR] scaleDeployment:', err.body?.message || err.message);
     res.status(500).json({
       error: 'Failed to scale deployment',
-      details: err.response?.body || err.message,
+      details: err.body?.message || err.message,
     });
   }
 };
+
 
 // DELETE /analyzer/:namespace/:kind/:name  (Admin)
 export const deleteResource = async (req, res) => {
@@ -180,133 +192,73 @@ export const viewSecret = async (req, res) => {
   }
 };
 
-// PUT /analyzer/:namespace/:kind/:name/edit  { yaml } (Admin)
-// export const editYaml = async (req, res) => {
-//   const { namespace, resourceType, name } = req.params;
-//   const { yaml } = req.body || {};
-
-//   try {
-//     if (!yaml) {
-//       return res.status(400).json({ error: 'YAML is required' });
-//     }
-
-//     const obj = YAML.parse(yaml);
-//     const yamlKind = obj?.kind?.toLowerCase();
-
-//     if (!yamlKind) {
-//       return res.status(400).json({ error: 'YAML must include a kind' });
-//     }
-
-//     // Ensure resource type matches kind
-//     if (obj?.metadata?.name !== name) {
-//       return res.status(400).json({
-//         error: `YAML name (${obj?.metadata?.name}) does not match path param name (${name})`,
-//       });
-//     }
-
-//     if (obj?.metadata?.namespace && obj.metadata.namespace !== namespace) {
-//       return res.status(400).json({
-//         error: `YAML namespace (${obj.metadata.namespace}) does not match path param namespace (${namespace})`,
-//       });
-//     }
-
-//     // Example: call K8s API (adjust for other resource types if needed)
-//     let result;
-//     switch (resourceType.toLowerCase()) {
-//       case 'deployments':
-//         result = await appsV1Api.replaceNamespacedDeployment(name, namespace, obj);
-//         break;
-//       case 'statefulsets':
-//         result = await appsV1Api.replaceNamespacedStatefulSet(name, namespace, obj);
-//         break;
-//       case 'daemonsets':
-//         result = await appsV1Api.replaceNamespacedDaemonSet(name, namespace, obj);
-//         break;
-//       case 'services':
-//         result = await coreV1Api.replaceNamespacedService(name, namespace, obj);
-//         break;
-//       // add more as needed...
-//       default:
-//         return res.status(400).json({ error: `Unsupported resource type: ${resourceType}` });
-//     }
-
-//     res.json({ ok: true, message: `${obj.kind} ${name} updated`, resource: result.body });
-//   } catch (err) {
-//     console.error(`[ERROR] editYaml ${namespace}/${resourceType}/${name}:`, err.body?.message || err.message);
-//     res.status(500).json({
-//       error: 'Failed to apply YAML',
-//       details: err.body?.message || err.message,
-//     });
-//   }
-// };
-
-
+// PUT /analyzer/:namespace/:resourceType/:name/edit  { yaml }
 export const editYaml = async (req, res) => {
+  const { namespace, resourceType, name } = req.params;
+  const { yaml: yamlText } = req.body || {};
   try {
-    const { namespace, resourceType, name } = req.params;
-    const { yaml: yamlText } = req.body;
-
-    if (!yamlText) {
-      return res.status(400).json({ error: 'YAML text is required' });
+    if (!yamlText || typeof yamlText !== 'string') {
+      return res.status(400).json({ error: 'yaml is required in body' });
     }
 
-    // Parse YAML
-    let parsed;
-    try {
-      parsed = yaml.load(yamlText);
-    } catch (err) {
-      return res.status(400).json({ error: 'Invalid YAML format', details: err.message });
+    const obj = yaml.load(yamlText); // <— use `yaml.load` here
+    if (!obj || typeof obj !== 'object') {
+      return res.status(400).json({ error: 'Invalid YAML content' });
     }
-
-    const kind = parsed?.kind;
-    const metadata = parsed?.metadata;
-
-    if (!kind || !metadata?.name) {
+    if (!obj.kind || !obj.metadata?.name) {
       return res.status(400).json({ error: 'YAML must include kind and metadata.name' });
     }
 
-    if (metadata.name !== name) {
-      return res.status(400).json({
-        error: `YAML name (${metadata.name}) does not match path name (${name})`
-      });
+    // Validate name/namespace
+    if (obj.metadata.name !== name) {
+      return res.status(400).json({ error: `YAML name (${obj.metadata.name}) does not match path param (${name})` });
+    }
+    // default YAML namespace if omitted
+    if (!obj.metadata.namespace) obj.metadata.namespace = namespace;
+    if (obj.metadata.namespace !== namespace) {
+      return res.status(400).json({ error: `YAML namespace (${obj.metadata.namespace}) does not match path param (${namespace})` });
     }
 
-    if (metadata.namespace && metadata.namespace !== namespace) {
-      return res.status(400).json({
-        error: `YAML namespace (${metadata.namespace}) does not match path namespace (${namespace})`
-      });
+    // Validate kind against path resourceType
+    const yamlKindLower = String(obj.kind).toLowerCase();
+    const expectedKindLower = toSingularKind(resourceType);
+    if (yamlKindLower !== expectedKindLower) {
+      return res.status(400).json({ error: `YAML kind (${obj.kind}) does not match path kind (${resourceType})` });
     }
 
-    // Setup client
-    const kc = new k8s.KubeConfig();
-    kc.loadFromDefault();
+    // Replace full object by kind
+    let result;
+    switch (yamlKindLower) {
+      case 'pod':
+        result = await coreV1Api.replaceNamespacedPod(name, namespace, obj); break;
+      case 'service':
+        result = await coreV1Api.replaceNamespacedService(name, namespace, obj); break;
+      case 'configmap':
+        result = await coreV1Api.replaceNamespacedConfigMap(name, namespace, obj); break;
+      case 'secret':
+        result = await coreV1Api.replaceNamespacedSecret(name, namespace, obj); break;
+      case 'persistentvolumeclaim':
+        result = await coreV1Api.replaceNamespacedPersistentVolumeClaim(name, namespace, obj); break;
+      case 'deployment':
+        result = await appsV1Api.replaceNamespacedDeployment(name, namespace, obj); break;
+      case 'statefulset':
+        result = await appsV1Api.replaceNamespacedStatefulSet(name, namespace, obj); break;
+      case 'daemonset':
+        result = await appsV1Api.replaceNamespacedDaemonSet(name, namespace, obj); break;
+      case 'job':
+        result = await batchV1Api.replaceNamespacedJob(name, namespace, obj); break;
+      case 'cronjob':
+        result = await batchV1Api.replaceNamespacedCronJob(name, namespace, obj); break;
+      case 'ingress':
+        result = await networkingV1Api.replaceNamespacedIngress(name, namespace, obj); break;
+      default:
+        return res.status(400).json({ error: `Unsupported kind for edit: ${obj.kind}` });
+    }
 
-    // Use dynamic client (works for all kinds)
-    const k8sApi = kc.makeApiClient(k8s.KubernetesObjectApi);
-
-    // Apply updated object
-    parsed.metadata.namespace = namespace; // ensure namespace is set
-    const response = await k8sApi.patch(
-      parsed,
-      undefined,
-      undefined,
-      undefined,
-      {
-        headers: { 'Content-Type': 'application/merge-patch+json' }, // ✅ needed for K8s patch
-      }
-    );
-
-    res.json({
-      success: true,
-      message: `${kind} ${name} updated successfully`,
-      resource: response.body,
-    });
+    res.json({ ok: true, message: `${obj.kind} ${name} updated`, resource: result.body });
   } catch (err) {
-    console.error('Apply YAML error:', err.response?.body || err.message);
-    res.status(500).json({
-      error: 'Failed to apply YAML',
-      details: err.response?.body || err.message,
-    });
+    console.error(`[ERROR] editYaml ${namespace}/${resourceType}/${name}:`, err.body?.message || err.message);
+    res.status(500).json({ error: 'Failed to apply YAML', details: err.body?.message || err.message });
   }
 };
 

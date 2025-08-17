@@ -1,6 +1,6 @@
 // src/components/AnalyzerDetailsDrawer.jsx
 import React, { useEffect, useState } from 'react';
-
+import YAML from 'js-yaml';
 
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
@@ -97,7 +97,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
         const [details, yamlRes, evs] = await Promise.all([
             apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/details`, {}, role),
             apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/yaml`, {}, role),
-            apiFetch(`/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/events`, {}, role),
+            apiFetch(`/api/analyzer/${resource.namespace}/${resource.name}/events`, {}, role),
         ]);
         setMeta(details);
         setYamlText(typeof yamlRes === 'string' ? yamlRes : '');
@@ -138,96 +138,69 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
     onClose();
   };
 
+// scale
 const doScale = async () => {
   const replicas = parseInt(scaleDraft, 10);
-
-  if (Number.isNaN(replicas) || replicas < 0) {
+  if (!Number.isInteger(replicas) || replicas < 0) {
     alert('Please enter a valid non-negative integer for replicas.');
     return;
   }
-
   try {
     await apiFetch(
       `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }, // ✅ correct type
-        body: JSON.stringify({ replicas }),             // ✅ simple payload
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replicas }),
       },
       role
     );
-
-    onActionDone?.();
-    onClose();
+    onActionDone?.(); onClose();
   } catch (e) {
     console.error('Scale error:', e);
-    alert(
-      `Failed to scale: ${e.message || 'Unknown error'}\n${
-        e.details || ''
-      }`
-    );
+    alert(`Failed to scale: ${e.message}`);
   }
 };
 
+// apply YAML
 const doApplyYaml = async () => {
   try {
-    if (!yamlText || yamlText.trim().length === 0) {
-      alert('YAML is empty');
-      return;
+    if (!yamlText?.trim()) {
+      alert('YAML is empty'); return;
     }
-
     let parsed;
-    try {
-      parsed = YAML.parse(yamlText); // ✅ safe parse
-    } catch (err) {
-      alert(`Invalid YAML: ${err.message}`);
-      return;
-    }
+    try { parsed = YAML.load(yamlText); }  // <-- use YAML.load to match backend
+    catch (err) { alert(`Invalid YAML: ${err.message}`); return; }
 
     const yamlKind = parsed?.kind;
-    if (!yamlKind) {
-      alert('YAML must include a kind');
-      return;
-    }
+    if (!yamlKind) { alert('YAML must include a kind'); return; }
 
-    const { apiType } = mapTypeKeys(yamlKind);
-
+    // name & namespace checks
     if (parsed?.metadata?.name !== resource.name) {
-      alert(
-        `YAML name (${parsed?.metadata?.name}) does not match resource name (${resource.name})`
-      );
+      alert(`YAML name (${parsed?.metadata?.name}) does not match resource name (${resource.name})`);
+      return;
+    }
+    if (parsed?.metadata?.namespace && parsed.metadata.namespace !== resource.namespace) {
+      alert(`YAML namespace (${parsed.metadata.namespace}) does not match resource namespace (${resource.namespace})`);
       return;
     }
 
-    if (
-      parsed?.metadata?.namespace &&
-      parsed.metadata.namespace !== resource.namespace
-    ) {
-      alert(
-        `YAML namespace (${parsed.metadata.namespace}) does not match resource namespace (${resource.namespace})`
-      );
-      return;
-    }
+    // path uses plural apiType derived from YAML.kind
+    const { apiType: yamlApiType } = mapTypeKeys(yamlKind);
 
     await apiFetch(
-      `/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/edit`,
+      `/api/analyzer/${resource.namespace}/${yamlApiType}/${resource.name}/edit`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yaml: yamlText }), // ✅ backend expects { yaml }
+        body: JSON.stringify({ yaml: yamlText }),
       },
       role
     );
-
-    onActionDone?.();
-    onClose();
+    onActionDone?.(); onClose();
   } catch (e) {
     console.error('Apply YAML failed:', e);
-    alert(
-      `Apply failed: ${e.message || 'Unknown error'}\n${
-        e.details || ''
-      }`
-    );
+    alert(`Apply failed: ${e.message}`);
   }
 };
 
