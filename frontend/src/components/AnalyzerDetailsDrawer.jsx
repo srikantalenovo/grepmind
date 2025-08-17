@@ -1,6 +1,7 @@
 // src/components/AnalyzerDetailsDrawer.jsx
 import React, { useEffect, useState } from 'react';
-import YAML from 'yaml';
+
+
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
@@ -139,6 +140,7 @@ export default function AnalyzerDetailsDrawer({ open, onClose, resource, role, o
 
 const doScale = async () => {
   const replicas = parseInt(scaleDraft, 10);
+
   if (Number.isNaN(replicas) || replicas < 0) {
     alert('Please enter a valid non-negative integer for replicas.');
     return;
@@ -149,8 +151,8 @@ const doScale = async () => {
       `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ replicas }),
+        headers: { 'Content-Type': 'application/json' }, // ✅ correct type
+        body: JSON.stringify({ replicas }),             // ✅ simple payload
       },
       role
     );
@@ -159,7 +161,11 @@ const doScale = async () => {
     onClose();
   } catch (e) {
     console.error('Scale error:', e);
-    alert(`Failed to scale: ${e.message}\n${e.details || ''}`);
+    alert(
+      `Failed to scale: ${e.message || 'Unknown error'}\n${
+        e.details || ''
+      }`
+    );
   }
 };
 
@@ -170,23 +176,36 @@ const doApplyYaml = async () => {
       return;
     }
 
-    const parsed = YAML.parse(yamlText);
+    let parsed;
+    try {
+      parsed = YAML.parse(yamlText); // ✅ safe parse
+    } catch (err) {
+      alert(`Invalid YAML: ${err.message}`);
+      return;
+    }
+
     const yamlKind = parsed?.kind;
     if (!yamlKind) {
       alert('YAML must include a kind');
       return;
     }
 
-    // Use kind from YAML
     const { apiType } = mapTypeKeys(yamlKind);
 
     if (parsed?.metadata?.name !== resource.name) {
-      alert(`YAML name (${parsed?.metadata?.name}) does not match resource name (${resource.name})`);
+      alert(
+        `YAML name (${parsed?.metadata?.name}) does not match resource name (${resource.name})`
+      );
       return;
     }
 
-    if (parsed?.metadata?.namespace && parsed.metadata.namespace !== resource.namespace) {
-      alert(`YAML namespace (${parsed.metadata.namespace}) does not match resource namespace (${resource.namespace})`);
+    if (
+      parsed?.metadata?.namespace &&
+      parsed.metadata.namespace !== resource.namespace
+    ) {
+      alert(
+        `YAML namespace (${parsed.metadata.namespace}) does not match resource namespace (${resource.namespace})`
+      );
       return;
     }
 
@@ -195,7 +214,7 @@ const doApplyYaml = async () => {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yaml: yamlText }),
+        body: JSON.stringify({ yaml: yamlText }), // ✅ backend expects { yaml }
       },
       role
     );
@@ -204,7 +223,11 @@ const doApplyYaml = async () => {
     onClose();
   } catch (e) {
     console.error('Apply YAML failed:', e);
-    alert(`Apply failed: ${e.message}`);
+    alert(
+      `Apply failed: ${e.message || 'Unknown error'}\n${
+        e.details || ''
+      }`
+    );
   }
 };
 
