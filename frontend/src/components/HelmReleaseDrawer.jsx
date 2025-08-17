@@ -5,7 +5,7 @@ import 'ace-builds/src-noconflict/mode-yaml';
 import 'ace-builds/src-noconflict/theme-github';
 import { motion, AnimatePresence } from 'framer-motion';
 
-
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 // ---------- apiFetch ----------
 async function apiFetch(path, opts = {}, role = 'editor') {
   // Validate role

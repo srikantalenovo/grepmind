@@ -23,7 +23,14 @@ async function runHelmCommand(cmd) {
 export const getHelmReleases = async (req, res) => {
   try {
     const { namespace } = req.query;
-    const nsFlag = namespace && namespace !== 'all' ? `--namespace ${namespace}` : '';
+
+    let nsFlag = '';
+    if (namespace && namespace !== 'all') {
+      nsFlag = `--namespace ${namespace}`;
+    } else if (namespace === 'all') {
+      nsFlag = `--all-namespaces`;
+    }
+
     const cmd = `helm list ${nsFlag} -o json`;
 
     const stdout = await runHelmCommand(cmd);
