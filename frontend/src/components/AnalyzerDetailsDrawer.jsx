@@ -151,18 +151,12 @@ const doScale = async () => {
   }
 
   try {
-    // always scale Deployments (plural lowercase for API path)
     await apiFetch(
       `/api/analyzer/${resource.namespace}/deployments/${resource.name}/scale`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/merge-patch+json', 
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          spec: { replicas: parseInt(scaleDraft, 10) }
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replicas })   // ✅ always send simple { replicas }
       },
       role
     );
@@ -182,6 +176,7 @@ const doApplyYaml = async () => {
       return;
     }
 
+    // Parse YAML
     const parsed = YAML.parse(yamlText);
     const yamlKind = parsed?.kind;
     if (!yamlKind) {
@@ -189,20 +184,26 @@ const doApplyYaml = async () => {
       return;
     }
 
-    // Map directly from parsed YAML
+    // Use kind from YAML, not resource.type (fixes toLowerCase issue)
     const { apiType, kind } = mapTypeKeys(yamlKind);
 
-    // Ensure namespace matches
+    // Validate name & namespace
+    if (parsed?.metadata?.name !== resource.name) {
+      alert(`YAML name (${parsed?.metadata?.name}) does not match resource name (${resource.name})`);
+      return;
+    }
     if (parsed?.metadata?.namespace && parsed.metadata.namespace !== resource.namespace) {
-      parsed.metadata.namespace = resource.namespace; // ✅ auto-fix mismatch
+      alert(`YAML namespace (${parsed.metadata.namespace}) does not match resource namespace (${resource.namespace})`);
+      return;
     }
 
+    // Call backend
     await apiFetch(
       `/api/analyzer/${resource.namespace}/${apiType}/${resource.name}/edit`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yaml: YAML.stringify(parsed) }) // ✅ re-stringify with corrected namespace
+        body: JSON.stringify({ yaml: yamlText })
       },
       role
     );
@@ -210,6 +211,7 @@ const doApplyYaml = async () => {
     onActionDone?.();
     onClose();
   } catch (e) {
+    console.error('Apply YAML failed:', e);
     alert(`Apply failed: ${e.message}`);
   }
 };

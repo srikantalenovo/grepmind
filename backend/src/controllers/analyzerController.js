@@ -57,8 +57,8 @@ export const deletePod = async (req, res) => {
 };
 
 export const scaleDeployment = async (req, res) => {
-  const { namespace, name } = req.params;  // ✅ fix: use namespace (not ns)
-  let replicas = req.body?.replicas ?? req.body?.spec?.replicas;
+  const { namespace, name } = req.params;
+  let { replicas } = req.body;
 
   try {
     replicas = parseInt(replicas, 10);
@@ -180,9 +180,11 @@ export const viewSecret = async (req, res) => {
 export const editYaml = async (req, res) => {
   const { namespace, kind, name } = req.params;
   const { yaml: yamlText } = req.body || {};
+
   if (!yamlText || typeof yamlText !== 'string') {
     return res.status(400).json({ error: 'yaml is required in body' });
   }
+
   try {
     const obj = yaml.load(yamlText);
     if (!obj || typeof obj !== 'object') {
@@ -191,21 +193,51 @@ export const editYaml = async (req, res) => {
     if (!obj.kind || !obj.metadata?.name) {
       return res.status(400).json({ error: 'YAML must include kind and metadata.name' });
     }
-    const yKind = obj.kind.toLowerCase();
+
+    // Normalize kinds: plural in path vs singular in YAML
+    const yKind = obj.kind.toLowerCase();            // from YAML
+    const pKind = (kind || '').toLowerCase();        // from path (may be plural like "deployments")
     const yName = obj.metadata.name;
     const yNs = obj.metadata?.namespace || namespace;
 
+    // Validate name
     if (yName !== name) {
-      return res.status(400).json({ error: `YAML name (${yName}) does not match path param (${name})` });
-    }
-    if (yNs !== namespace) {
-      return res.status(400).json({ error: `YAML namespace (${yNs}) does not match path param (${namespace})` });
-    }
-    if (yKind !== kind.toLowerCase() && !(kind.toLowerCase() === 'pvc' && yKind === 'persistentvolumeclaim')) {
-      return res.status(400).json({ error: `YAML kind (${obj.kind}) does not match path kind (${kind})` });
+      return res.status(400).json({
+        error: `YAML name (${yName}) does not match path param (${name})`
+      });
     }
 
-    // Use replace for full object updates
+    // Validate namespace
+    if (yNs !== namespace) {
+      return res.status(400).json({
+        error: `YAML namespace (${yNs}) does not match path param (${namespace})`
+      });
+    }
+
+    // Map plural → singular for comparison
+    const pluralToSingular = {
+      pods: 'pod',
+      services: 'service',
+      configmaps: 'configmap',
+      secrets: 'secret',
+      pvcs: 'persistentvolumeclaim',
+      deployments: 'deployment',
+      statefulsets: 'statefulset',
+      daemonsets: 'daemonset',
+      jobs: 'job',
+      cronjobs: 'cronjob',
+      ingresses: 'ingress',
+    };
+
+    const expectedKind = pluralToSingular[pKind] || pKind; // normalize
+
+    if (yKind !== expectedKind) {
+      return res.status(400).json({
+        error: `YAML kind (${obj.kind}) does not match path kind (${kind})`
+      });
+    }
+
+    // ✅ Use replace for full updates
     switch (yKind) {
       case 'pod':
         return res.json((await coreV1Api.replaceNamespacedPod(name, namespace, obj)).body);
@@ -234,7 +266,10 @@ export const editYaml = async (req, res) => {
     }
   } catch (err) {
     console.error(`[ERROR] editYaml ${namespace}/${kind}/${name}:`, err.body?.message || err.message);
-    res.status(500).json({ error: 'Failed to apply YAML', details: err.body?.message || err.message });
+    res.status(500).json({
+      error: 'Failed to apply YAML',
+      details: err.body?.message || err.message
+    });
   }
 };
 
