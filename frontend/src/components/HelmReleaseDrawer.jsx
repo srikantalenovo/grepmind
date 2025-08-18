@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AceEditor from 'react-ace';
+import 'ace-builds/src-noconflict/worker-yaml';
 import 'ace-builds/src-noconflict/mode-yaml';
 import 'ace-builds/src-noconflict/theme-github';
 import { motion, AnimatePresence } from 'framer-motion';
