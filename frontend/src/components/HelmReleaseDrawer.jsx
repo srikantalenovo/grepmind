@@ -1,4 +1,3 @@
-// src/components/HelmReleaseDrawer.jsx
 import React, { useEffect, useState } from 'react';
 import AceEditor from 'react-ace';
 import 'ace-builds/src-noconflict/mode-yaml';
@@ -7,74 +6,85 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-// ---------- apiFetch ----------
 async function apiFetch(path, opts = {}, role = 'editor') {
   const userRole = role === 'admin' ? 'admin' : 'editor';
-
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
       'x-user-role': userRole,
       ...(opts.headers || {}),
-      ...((opts.body && !opts.headers?.['Content-Type'])
-        ? { 'Content-Type': 'application/json' }
-        : {}),
+      ...((opts.body && !opts.headers?.['Content-Type']) ? { 'Content-Type': 'application/json' } : {}),
     },
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(
-      `HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`
-    );
+    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
   }
 
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-export default function HelmReleaseDrawer({
-  open,
-  release,
-  onClose,
-  onActionDone,
-  role,
-}) {
+export default function HelmReleaseDrawer({ open, mode = 'manage', release, onClose, onActionDone, role }) {
   const [details, setDetails] = useState(null);
   const [yaml, setYaml] = useState('');
+  const [chart, setChart] = useState('');
+  const [version, setVersion] = useState('');
+  const [releaseName, setReleaseName] = useState('');
+  const [namespace, setNamespace] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch release details
   useEffect(() => {
-    if (release && open) {
+    if (mode === 'manage' && release && open) {
       setLoading(true);
-      apiFetch(
-        `/api/helm/releases/${release.namespace}/${release.name}`,
-        {},
-        role
-      )
+      apiFetch(`/api/helm/releases/${release.namespace}/${release.name}`, {}, role)
         .then((res) => {
           setDetails(res);
           if (res.valuesYaml) setYaml(res.valuesYaml);
+          setChart(res.chart || '');
+          setVersion(res.app_version || '');
+          setReleaseName(res.name);
+          setNamespace(res.namespace);
         })
         .catch((err) => setError(err.message))
         .finally(() => setLoading(false));
+    } else if (mode === 'install') {
+      setDetails(null);
+      setYaml('');
+      setChart('');
+      setVersion('');
+      setReleaseName('');
+      setNamespace('');
     }
-  }, [release, open, role]);
+  }, [release, open, mode, role]);
+
+  const handleInstall = async () => {
+    if (!releaseName || !namespace || !chart) return alert('Release name, namespace and chart are required');
+    try {
+      setSaving(true);
+      await apiFetch(`/api/helm/releases/install`, {
+        method: 'POST',
+        body: JSON.stringify({ releaseName, namespace, chart, version, values: yaml }),
+      }, role);
+      onActionDone();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleUpgrade = async () => {
     try {
       setSaving(true);
-      await apiFetch(
-        `/api/helm/releases/${release.namespace}/${release.name}/upgrade`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ values: yaml }),
-        },
-        role
-      );
+      await apiFetch(`/api/helm/releases/${namespace}/${releaseName}/upgrade`, {
+        method: 'POST',
+        body: JSON.stringify({ chart, version, values: yaml }),
+      }, role);
       onActionDone();
       onClose();
     } catch (err) {
@@ -87,11 +97,7 @@ export default function HelmReleaseDrawer({
   const handleRollback = async () => {
     try {
       setSaving(true);
-      await apiFetch(
-        `/api/helm/releases/${release.namespace}/${release.name}/rollback`,
-        { method: 'POST' },
-        role
-      );
+      await apiFetch(`/api/helm/releases/${namespace}/${releaseName}/rollback`, { method: 'POST' }, role);
       onActionDone();
       onClose();
     } catch (err) {
@@ -104,11 +110,7 @@ export default function HelmReleaseDrawer({
   const handleUninstall = async () => {
     try {
       setSaving(true);
-      await apiFetch(
-        `/api/helm/releases/${release.namespace}/${release.name}`,
-        { method: 'DELETE' },
-        role
-      );
+      await apiFetch(`/api/helm/releases/${namespace}/${releaseName}`, { method: 'DELETE' }, role);
       onActionDone();
       onClose();
     } catch (err) {
@@ -131,37 +133,9 @@ export default function HelmReleaseDrawer({
           {/* Header */}
           <div className="bg-indigo-600 text-white p-4 flex justify-between items-center rounded-tl-2xl">
             <h2 className="text-lg font-semibold">
-              Release: {release?.name} ({release?.namespace})
+              {mode === 'install' ? 'Install New Release' : `Release: ${releaseName} (${namespace})`}
             </h2>
-            <div className="flex space-x-2 items-center">
-              <button
-                onClick={handleUpgrade}
-                disabled={saving}
-                className="bg-white text-indigo-600 px-3 py-1 rounded hover:bg-gray-100 transition"
-              >
-                {saving ? 'Applying…' : 'Upgrade'}
-              </button>
-              <button
-                onClick={handleRollback}
-                disabled={saving}
-                className="bg-yellow-400 text-white px-3 py-1 rounded hover:bg-yellow-500 transition"
-              >
-                Rollback
-              </button>
-              <button
-                onClick={handleUninstall}
-                disabled={saving}
-                className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition"
-              >
-                Uninstall
-              </button>
-              <button
-                onClick={onClose}
-                className="text-white hover:text-gray-200 transition"
-              >
-                ✕
-              </button>
-            </div>
+            <button onClick={onClose} className="text-white hover:text-gray-200 transition">✕</button>
           </div>
 
           {/* Content */}
@@ -172,40 +146,61 @@ export default function HelmReleaseDrawer({
               <p className="text-red-500">{error}</p>
             ) : (
               <>
-                {/* Release Info */}
-                <div className="border rounded-lg shadow p-3">
-                  <h3 className="text-indigo-600 font-medium mb-2">Details</h3>
-                  <ul className="text-sm space-y-1">
-                    <li>
-                      <strong>Name:</strong> {release?.name}
-                    </li>
-                    <li>
-                      <strong>Namespace:</strong> {release?.namespace}
-                    </li>
-                    <li>
-                      <strong>Chart:</strong> {release?.chart}
-                    </li>
-                    <li>
-                      <strong>App Version:</strong>{' '}
-                      {release?.app_version || '-'}
-                    </li>
-                    <li>
-                      <strong>Revision:</strong> {release?.revision}
-                    </li>
-                    <li>
-                      <strong>Status:</strong> {release?.status}
-                    </li>
-                    <li>
-                      <strong>Updated:</strong> {release?.updated}
-                    </li>
-                  </ul>
+                {/* Install / Upgrade Form */}
+                <div className="border rounded-lg shadow p-3 space-y-2">
+                  {mode === 'install' && (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Release Name"
+                        value={releaseName}
+                        onChange={e => setReleaseName(e.target.value)}
+                        className="w-full border px-2 py-1 rounded"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Namespace"
+                        value={namespace}
+                        onChange={e => setNamespace(e.target.value)}
+                        className="w-full border px-2 py-1 rounded"
+                      />
+                    </>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="Chart"
+                    value={chart}
+                    onChange={e => setChart(e.target.value)}
+                    className="w-full border px-2 py-1 rounded"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Version (optional)"
+                    value={version}
+                    onChange={e => setVersion(e.target.value)}
+                    className="w-full border px-2 py-1 rounded"
+                  />
                 </div>
+
+                {/* Existing Release Details */}
+                {mode === 'manage' && details && (
+                  <div className="border rounded-lg shadow p-3">
+                    <h3 className="text-indigo-600 font-medium mb-2">Details</h3>
+                    <ul className="text-sm space-y-1">
+                      <li><strong>Name:</strong> {releaseName}</li>
+                      <li><strong>Namespace:</strong> {namespace}</li>
+                      <li><strong>Chart:</strong> {chart}</li>
+                      <li><strong>App Version:</strong> {version || '-'}</li>
+                      <li><strong>Revision:</strong> {details.revision}</li>
+                      <li><strong>Status:</strong> {details.status}</li>
+                      <li><strong>Updated:</strong> {details.updated}</li>
+                    </ul>
+                  </div>
+                )}
 
                 {/* YAML Editor */}
                 <div className="border rounded-lg shadow p-3">
-                  <h3 className="text-indigo-600 font-medium mb-2">
-                    Values.yaml
-                  </h3>
+                  <h3 className="text-indigo-600 font-medium mb-2">Values.yaml</h3>
                   <AceEditor
                     mode="yaml"
                     theme="github"
@@ -223,8 +218,43 @@ export default function HelmReleaseDrawer({
             )}
           </div>
 
-          {/* Footer */}
-          <div className="p-4 border-t bg-gray-50 rounded-br-2xl flex justify-end">
+          {/* Footer Actions */}
+          <div className="p-4 border-t flex justify-between bg-gray-50 rounded-br-2xl">
+            <div className="space-x-2">
+              {mode === 'install' ? (
+                <button
+                  onClick={handleInstall}
+                  disabled={saving}
+                  className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition"
+                >
+                  {saving ? 'Installing…' : 'Install'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleUpgrade}
+                    disabled={saving}
+                    className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition"
+                  >
+                    {saving ? 'Upgrading…' : 'Upgrade'}
+                  </button>
+                  <button
+                    onClick={handleRollback}
+                    disabled={saving}
+                    className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 transition"
+                  >
+                    Rollback
+                  </button>
+                  <button
+                    onClick={handleUninstall}
+                    disabled={saving}
+                    className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition"
+                  >
+                    Uninstall
+                  </button>
+                </>
+              )}
+            </div>
             <button
               onClick={onClose}
               className="px-3 py-1 border rounded hover:bg-gray-100 transition"
