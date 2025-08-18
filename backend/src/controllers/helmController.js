@@ -23,14 +23,7 @@ async function runHelmCommand(cmd) {
 export const getHelmReleases = async (req, res) => {
   try {
     const { namespace } = req.query;
-
-    let nsFlag = '';
-    if (namespace && namespace !== 'all') {
-      nsFlag = `--namespace ${namespace}`;
-    } else if (namespace === 'all') {
-      nsFlag = `--all-namespaces`;
-    }
-
+    const nsFlag = namespace && namespace !== 'all' ? `--namespace ${namespace}` : '--all-namespaces';
     const cmd = `helm list ${nsFlag} -o json`;
 
     const stdout = await runHelmCommand(cmd);
@@ -50,27 +43,19 @@ export const getHelmReleases = async (req, res) => {
 };
 
 /**
- * GET /api/helm/releases/:namespace/:releaseName
+ * GET /api/helm/releases/:namespace/:release
  */
 export const getHelmReleaseDetails = async (req, res) => {
   try {
-    const { namespace, releaseName } = req.params;
-
-    if (!releaseName) return res.status(400).json({ error: 'Release name is required' });
-
-    const nsFlag = namespace && namespace !== 'all' ? `--namespace ${namespace}` : '';
-    const cmd = `helm get all ${releaseName} ${nsFlag} -o json`;
-
-    const stdout = await runHelmCommand(cmd);
-    let details;
-    try {
-      details = JSON.parse(stdout);
-    } catch (err) {
-      console.error('[ERROR] Parsing Helm get output:', err, stdout);
-      return res.status(500).json({ error: 'Failed to parse Helm output', details: err.message });
+    const { namespace, release } = req.params;
+    if (!namespace || !release) {
+      return res.status(400).json({ error: 'Namespace and release are required' });
     }
 
-    res.json({ release: details });
+    const cmd = `helm get all ${release} -n ${namespace}`;
+    const stdout = await runHelmCommand(cmd);
+
+    return res.json({ details: stdout });
   } catch (err) {
     console.error('[ERROR] getHelmReleaseDetails:', err);
     res.status(500).json({ error: err.message || String(err) });
@@ -78,45 +63,43 @@ export const getHelmReleaseDetails = async (req, res) => {
 };
 
 /**
- * POST /api/helm/releases/:namespace/:releaseName/upgrade
- * body: { chart, valuesYaml }
+ * POST /api/helm/releases/install
+ */
+export const installHelmRelease = async (req, res) => {
+  try {
+    const { name, namespace, chart, version, values } = req.body;
+    if (!name || !chart || !namespace) {
+      return res.status(400).json({ error: 'name, namespace, and chart are required' });
+    }
+
+    const versionFlag = version ? `--version ${version}` : '';
+    const valuesFlag = values ? `-f -` : '';
+    const cmd = `helm install ${name} ${chart} -n ${namespace} ${versionFlag} ${valuesFlag}`;
+
+    const stdout = await runHelmCommand(cmd, values ? values : null);
+    return res.json({ message: 'Release installed', output: stdout });
+  } catch (err) {
+    console.error('[ERROR] installHelmRelease:', err);
+    res.status(500).json({ error: err.message || String(err) });
+  }
+};
+
+/**
+ * POST /api/helm/releases/upgrade
  */
 export const upgradeHelmRelease = async (req, res) => {
   try {
-    const { namespace, releaseName } = req.params;
-    const { chart, valuesYaml } = req.body;
-
-    if (!releaseName || !chart) return res.status(400).json({ error: 'Release name and chart are required' });
-
-    const nsFlag = namespace && namespace !== 'all' ? `--namespace ${namespace}` : '';
-    const valuesFlag = valuesYaml ? `-f -` : '';
-    const cmd = `helm upgrade ${releaseName} ${chart} ${nsFlag} ${valuesFlag} -o json`;
-
-    let stdout;
-    if (valuesYaml) {
-      const child = exec(`helm upgrade ${releaseName} ${chart} ${nsFlag} -f - -o json`);
-      child.stdin.write(valuesYaml);
-      child.stdin.end();
-
-      stdout = await new Promise((resolve, reject) => {
-        let output = '';
-        child.stdout.on('data', data => (output += data));
-        child.stderr.on('data', data => console.error('[Helm STDERR]:', data));
-        child.on('close', code => (code === 0 ? resolve(output) : reject(new Error(`Helm exited with ${code}`))));
-      });
-    } else {
-      stdout = await runHelmCommand(cmd);
+    const { name, namespace, chart, version, values } = req.body;
+    if (!name || !namespace || !chart) {
+      return res.status(400).json({ error: 'name, namespace, and chart are required' });
     }
 
-    let details;
-    try {
-      details = JSON.parse(stdout);
-    } catch (err) {
-      console.error('[ERROR] Parsing Helm upgrade output:', err, stdout);
-      return res.status(500).json({ error: 'Failed to parse Helm output', details: err.message });
-    }
+    const versionFlag = version ? `--version ${version}` : '';
+    const valuesFlag = values ? `-f -` : '';
+    const cmd = `helm upgrade ${name} ${chart} -n ${namespace} ${versionFlag} ${valuesFlag}`;
 
-    res.json({ release: details });
+    const stdout = await runHelmCommand(cmd, values ? values : null);
+    return res.json({ message: 'Release upgraded', output: stdout });
   } catch (err) {
     console.error('[ERROR] upgradeHelmRelease:', err);
     res.status(500).json({ error: err.message || String(err) });
@@ -124,60 +107,21 @@ export const upgradeHelmRelease = async (req, res) => {
 };
 
 /**
- * POST /api/helm/releases/:namespace/:releaseName/rollback
- * body: { revision }
+ * DELETE /api/helm/releases/:namespace/:release
  */
-export const rollbackHelmRelease = async (req, res) => {
+export const uninstallHelmRelease = async (req, res) => {
   try {
-    const { namespace, releaseName } = req.params;
-    const { revision } = req.body;
-
-    if (!releaseName || revision == null) return res.status(400).json({ error: 'Release name and revision are required' });
-
-    const nsFlag = namespace && namespace !== 'all' ? `--namespace ${namespace}` : '';
-    const cmd = `helm rollback ${releaseName} ${revision} ${nsFlag} -o json`;
-
-    const stdout = await runHelmCommand(cmd);
-
-    let details;
-    try {
-      details = JSON.parse(stdout);
-    } catch (err) {
-      console.error('[ERROR] Parsing Helm rollback output:', err, stdout);
-      return res.status(500).json({ error: 'Failed to parse Helm output', details: err.message });
+    const { namespace, release } = req.params;
+    if (!release || !namespace) {
+      return res.status(400).json({ error: 'Release and namespace are required' });
     }
 
-    res.json({ release: details });
-  } catch (err) {
-    console.error('[ERROR] rollbackHelmRelease:', err);
-    res.status(500).json({ error: err.message || String(err) });
-  }
-};
-
-/**
- * DELETE /api/helm/releases/:namespace/:releaseName
- */
-export const deleteHelmRelease = async (req, res) => {
-  try {
-    const { namespace, releaseName } = req.params;
-    if (!releaseName) return res.status(400).json({ error: 'Release name is required' });
-
-    const nsFlag = namespace && namespace !== 'all' ? `--namespace ${namespace}` : '';
-    const cmd = `helm uninstall ${releaseName} ${nsFlag} -o json`;
-
+    const cmd = `helm uninstall ${release} -n ${namespace}`;
     const stdout = await runHelmCommand(cmd);
 
-    let details;
-    try {
-      details = JSON.parse(stdout);
-    } catch (err) {
-      console.error('[ERROR] Parsing Helm uninstall output:', err, stdout);
-      return res.status(500).json({ error: 'Failed to parse Helm output', details: err.message });
-    }
-
-    res.json({ release: details });
+    return res.json({ message: 'Release uninstalled', output: stdout });
   } catch (err) {
-    console.error('[ERROR] deleteHelmRelease:', err);
+    console.error('[ERROR] uninstallHelmRelease:', err);
     res.status(500).json({ error: err.message || String(err) });
   }
 };

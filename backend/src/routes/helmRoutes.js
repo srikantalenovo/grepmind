@@ -1,19 +1,19 @@
+// routes/helmRoutes.js
 import express from 'express';
-import { rbac } from '../middleware/rbacMiddleware.js';
 import {
   getHelmReleases,
   getHelmReleaseDetails,
+  installHelmRelease,
   upgradeHelmRelease,
-  rollbackHelmRelease,
-  deleteHelmRelease
+  uninstallHelmRelease
 } from '../controllers/helmController.js';
 
 const router = express.Router();
 
-router.get('/releases', rbac(['editor','admin']), getHelmReleases);
-router.get('/releases/:namespace/:name', rbac(['editor','admin']), getHelmReleaseDetails);
-router.post('/releases/:namespace/:name/upgrade', rbac(['admin']), upgradeHelmRelease);
-router.post('/releases/:namespace/:name/rollback', rbac(['admin']), rollbackHelmRelease);
-router.delete('/releases/:namespace/:name', rbac(['admin']), deleteHelmRelease);
+router.get('/releases', getHelmReleases);
+router.get('/releases/:namespace/:release', getHelmReleaseDetails);
+router.post('/releases/install', installHelmRelease);
+router.post('/releases/upgrade', upgradeHelmRelease);
+router.delete('/releases/:namespace/:release', uninstallHelmRelease);
 
 export default router;

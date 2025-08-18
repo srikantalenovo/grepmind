@@ -7,8 +7,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+// ---------- apiFetch ----------
 async function apiFetch(path, opts = {}, role = 'editor') {
   const userRole = role === 'admin' ? 'admin' : 'editor';
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
@@ -19,12 +21,14 @@ async function apiFetch(path, opts = {}, role = 'editor') {
         : {}),
     },
   });
+
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(
       `HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`
     );
   }
+
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
 }
@@ -42,21 +46,12 @@ export default function HelmReleaseDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const [releaseName, setReleaseName] = useState(release?.name || '');
-  const [chartVersion, setChartVersion] = useState('');
-
-  const relNs = release?.namespace;
-
   // Fetch release details
   useEffect(() => {
     if (release && open) {
       setLoading(true);
-      setError(null);
-      setReleaseName(release.name);
       apiFetch(
-        `/api/helm/releases?namespace=${encodeURIComponent(
-          relNs
-        )}&release=${encodeURIComponent(release.name)}`,
+        `/api/helm/releases/${release.namespace}/${release.name}`,
         {},
         role
       )
@@ -69,17 +64,14 @@ export default function HelmReleaseDrawer({
     }
   }, [release, open, role]);
 
-  const handleInstall = async () => {
-    if (!releaseName) return alert('Release name is required');
+  const handleUpgrade = async () => {
     try {
       setSaving(true);
       await apiFetch(
-        `/api/helm/releases/install?namespace=${encodeURIComponent(
-          relNs
-        )}&release=${encodeURIComponent(releaseName)}`,
+        `/api/helm/releases/${release.namespace}/${release.name}/upgrade`,
         {
           method: 'POST',
-          body: JSON.stringify({ chartVersion, values: yaml }),
+          body: JSON.stringify({ values: yaml }),
         },
         role
       );
@@ -92,18 +84,12 @@ export default function HelmReleaseDrawer({
     }
   };
 
-  const handleUpgrade = async () => {
-    if (!releaseName) return alert('Release name is required');
+  const handleRollback = async () => {
     try {
       setSaving(true);
       await apiFetch(
-        `/api/helm/releases/upgrade?namespace=${encodeURIComponent(
-          relNs
-        )}&release=${encodeURIComponent(releaseName)}`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ chartVersion, values: yaml }),
-        },
+        `/api/helm/releases/${release.namespace}/${release.name}/rollback`,
+        { method: 'POST' },
         role
       );
       onActionDone();
@@ -116,13 +102,10 @@ export default function HelmReleaseDrawer({
   };
 
   const handleUninstall = async () => {
-    if (!releaseName) return alert('Release name is required');
     try {
       setSaving(true);
       await apiFetch(
-        `/api/helm/releases?namespace=${encodeURIComponent(
-          relNs
-        )}&release=${encodeURIComponent(releaseName)}`,
+        `/api/helm/releases/${release.namespace}/${release.name}`,
         { method: 'DELETE' },
         role
       );
@@ -148,46 +131,22 @@ export default function HelmReleaseDrawer({
           {/* Header */}
           <div className="bg-indigo-600 text-white p-4 flex justify-between items-center rounded-tl-2xl">
             <h2 className="text-lg font-semibold">
-              Release: {releaseName} ({release?.namespace})
+              Release: {release?.name} ({release?.namespace})
             </h2>
-            <button
-              onClick={onClose}
-              className="text-white hover:text-gray-200 transition"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Top Actions */}
-          <div className="p-4 flex flex-col md:flex-row gap-2 items-center border-b">
-            <input
-              type="text"
-              placeholder="Release Name"
-              value={releaseName}
-              onChange={(e) => setReleaseName(e.target.value)}
-              className="border px-2 py-1 rounded flex-1"
-            />
-            <input
-              type="text"
-              placeholder="Chart Version (optional)"
-              value={chartVersion}
-              onChange={(e) => setChartVersion(e.target.value)}
-              className="border px-2 py-1 rounded flex-1"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={handleInstall}
-                disabled={saving}
-                className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition"
-              >
-                Install
-              </button>
+            <div className="flex space-x-2 items-center">
               <button
                 onClick={handleUpgrade}
                 disabled={saving}
-                className="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition"
+                className="bg-white text-indigo-600 px-3 py-1 rounded hover:bg-gray-100 transition"
               >
-                Upgrade
+                {saving ? 'Applying…' : 'Upgrade'}
+              </button>
+              <button
+                onClick={handleRollback}
+                disabled={saving}
+                className="bg-yellow-400 text-white px-3 py-1 rounded hover:bg-yellow-500 transition"
+              >
+                Rollback
               </button>
               <button
                 onClick={handleUninstall}
@@ -195,6 +154,12 @@ export default function HelmReleaseDrawer({
                 className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition"
               >
                 Uninstall
+              </button>
+              <button
+                onClick={onClose}
+                className="text-white hover:text-gray-200 transition"
+              >
+                ✕
               </button>
             </div>
           </div>
@@ -221,7 +186,8 @@ export default function HelmReleaseDrawer({
                       <strong>Chart:</strong> {release?.chart}
                     </li>
                     <li>
-                      <strong>App Version:</strong> {release?.app_version || '-'}
+                      <strong>App Version:</strong>{' '}
+                      {release?.app_version || '-'}
                     </li>
                     <li>
                       <strong>Revision:</strong> {release?.revision}
@@ -255,6 +221,16 @@ export default function HelmReleaseDrawer({
                 </div>
               </>
             )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t bg-gray-50 rounded-br-2xl flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-3 py-1 border rounded hover:bg-gray-100 transition"
+            >
+              Cancel
+            </button>
           </div>
         </motion.div>
       )}
