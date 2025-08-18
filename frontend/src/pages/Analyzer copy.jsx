@@ -3,9 +3,6 @@ import React, { useEffect, useMemo, useRef, useState, useContext } from 'react';
 import AnalyzerDetailsDrawer from '../components/AnalyzerDetailsDrawer.jsx';
 import { AuthContext } from '../context/AuthContext';
 
-// HELM: Import HelmTab
-import HelmTab from '../pages/HelmTab.jsx';
-
 const API_BASE = import.meta.env.VITE_API_BASE || ''; // e.g. ''
 
 async function apiFetch(path, opts = {}, role = 'editor') {
@@ -28,6 +25,16 @@ async function apiFetch(path, opts = {}, role = 'editor') {
 async function fetchNamespaces(role) {
   return apiFetch('/api/cluster/namespaces', {}, role);
 }
+
+// async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }, role) {
+//   const params = new URLSearchParams();
+//   if (namespace) params.set('namespace', namespace);
+//   if (resourceType) params.set('resourceType', resourceType);
+//   if (search) params.set('search', search);
+//   params.set('problemsOnly', problemsOnly ? 'true' : 'false');
+//   //if (problemsOnly) params.set('problemsOnly', 'true');
+//   return apiFetch(`/analyzer/scan?${params.toString()}`, {}, role);
+// }
 
 
 async function scanAnalyzer({ namespace, resourceType, search, problemsOnly }) {
@@ -145,9 +152,6 @@ export default function Analyzer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRefresh, namespace, type, search, problemsOnly, role]);
 
-  // HELM: Tab state
-  const [activeTab, setActiveTab] = useState('resources');  
-
   const subtitle = useMemo(() => {
     const label = RESOURCE_TYPES.find(t => t.key === type)?.label || type;
     return `${label} · ${namespace === 'all' ? 'All Namespaces' : namespace}`;
@@ -235,27 +239,6 @@ export default function Analyzer() {
         </div>
       </div>
 
-{/* HELM: Tabs */}
-<div className="flex border-b border-gray-300">
-  <button
-    className={`px-4 py-2 font-medium ${activeTab === 'resources' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600'}`}
-    onClick={() => setActiveTab('resources')}
-  >
-    Resources
-  </button>
-  <button
-    className={`px-4 py-2 font-medium ${activeTab === 'helm' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600'}`}
-    onClick={() => setActiveTab('helm')}
-  >
-    Helm
-  </button>
-</div>
-
-{/* HELM: Tab Content */}
-<div>
-  {activeTab === 'resources' && (
-    <>
-
       {/* Table */}
       <div className="rounded-2xl overflow-hidden shadow-lg border border-gray-200 backdrop-blur-md bg-white/70">
         <div className="overflow-x-auto">
@@ -324,14 +307,6 @@ export default function Analyzer() {
           </table>
         </div>
       </div>
-    </>
-  )} 
-
-  {/* HELM: Helm tab content */}
-  {activeTab === 'helm' && (
-    <HelmTab namespace={namespace} /> // HELM: Added HelmTab component
-  )}
-</div>       
 
       {/* Drawer */}
       <AnalyzerDetailsDrawer

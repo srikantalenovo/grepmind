@@ -1,2 +1,2 @@
 # grepmind 
-analyzer without helm 
+analyzer with helm 

@@ -3,7 +3,7 @@ FROM node:20-alpine as build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install @vitejs/plugin-react react-icons js-yaml yaml
+RUN npm install @vitejs/plugin-react react-icons js-yaml yaml react-ace ace-builds brace framer-motion
 
 COPY . .
 RUN npm run build
