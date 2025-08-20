@@ -8,6 +8,8 @@ import resourcesRoutes from "./routes/resourcesRoutes.js";
 import clusterRoutes from './routes/clusterRoutes.js';
 import analyzerRoutes from './routes/analyzerRoutes.js';
 import helmRoutes from './routes/helmRoutes.js'
+import analyticsRoutes from './routes/analyticsRoutes.js';
+import dataSourceRoutes from './routes/dataSourceRoutes.js';
 
 dotenv.config();
 
@@ -28,6 +30,8 @@ app.use('/api/cluster', clusterRoutes);
 app.use('/analyzer', analyzerRoutes);
 app.use('/api/analyzer', analyzerRoutes);
 app.use('/api/helm', helmRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/datasources', dataSourceRoutes);
 
 // Database init + extension check
 async function initDatabase() {
