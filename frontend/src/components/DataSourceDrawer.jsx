@@ -48,13 +48,19 @@ export default function DataSourceDrawer() {
       alert('Only admin can change data sources');
       return;
     }
+    if (!url || url.trim() === '') {
+      alert('Please provide a Prometheus URL');
+      return;
+    }
     setLoading(true);
+    setStatus(null);
     try {
-      const headers = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
+      await validatePrometheus(url);
+      const headers = { Authorization: `Bearer ${token}` };
       await axios.post(`${API}/datasources/prometheus`, { url }, { headers });
-      setStatus('Saved');
+      setStatus('Saved ✅');
     } catch (e) {
-      setStatus('Failed: ' + (e.response?.data?.message || e.message));
+      setStatus('Failed ❌: ' + e.message);
     } finally {
       setLoading(false);
     }
