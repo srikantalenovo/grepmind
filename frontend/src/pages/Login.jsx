@@ -14,7 +14,11 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login(email, password);
+      const { accessToken, refreshToken } = await login(email, password);
+      // --- ADD THESE LINES ---
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken);
+      // ------------------------      
       navigate("/");
     } catch (err) {
       setError(err.response?.data?.error || "Login failed");

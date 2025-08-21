@@ -94,6 +94,54 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// ✅ Refresh Token
+router.post("/refresh", async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(401).json({ error: "No refresh token" });
+
+  try {
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const userId = decoded.userId;
+
+    // Check DB for stored tokens
+    const storedTokens = await prisma.refreshToken.findMany({
+      where: { userId },
+    });
+
+    if (!storedTokens || storedTokens.length === 0) {
+      return res.status(401).json({ error: "Refresh token not found" });
+    }
+
+    let isValid = false;
+    for (let stored of storedTokens) {
+      const match = await bcrypt.compare(refreshToken, stored.tokenHash);
+      if (match && stored.expiresAt > new Date()) {
+        isValid = true;
+        break;
+      }
+    }
+
+    if (!isValid) return res.status(401).json({ error: "Invalid or expired refresh token" });
+
+    // Generate new tokens
+    const { accessToken, refreshToken: newRefresh } = generateTokens(userId);
+
+    await prisma.refreshToken.create({
+      data: {
+        tokenHash: bcrypt.hashSync(newRefresh, 10),
+        userId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    res.json({ accessToken, refreshToken: newRefresh });
+  } catch (err) {
+    console.error("Refresh error:", err);
+    return res.status(401).json({ error: "Invalid refresh token" });
+  }
+});
+// Refresh token end
+
 router.get('/me', requireAuth, async (req, res) => {
   res.json({ user: req.user });
 });

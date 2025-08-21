@@ -16,7 +16,11 @@ export default function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await signup(name, email, password, role.toLowerCase());
+      const { accessToken, refreshToken }  = await signup(name, email, password, role.toLowerCase());
+          // --- ADD THESE LINES ---
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken);
+         // ------------------------
       navigate("/");
     } catch (err) {
       setError(err.response?.data?.error || "Signup failed");
