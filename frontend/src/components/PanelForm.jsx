@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { AuthContext } from './context/AuthContext';
+import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
