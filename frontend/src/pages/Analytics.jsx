@@ -4,6 +4,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import DataSourceDrawer from '../components/DataSourceDrawer';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import MetricsDashboardDrawer from '../components/MetricsDashboardDrawer';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
@@ -13,6 +14,9 @@ function round(n, d=2){ const p = 10**d; return Math.round(n*p)/p; }
 export default function Analytics() {
   const { accessToken, user } = useContext(AuthContext);
   const role = user?.role || 'viewer';
+
+  // ADD THIS
+  const [dashboardDrawerOpen, setDashboardDrawerOpen] = useState(false);
 
   const [cluster, setCluster] = useState(null);
   const [nodes, setNodes] = useState([]);
@@ -210,6 +214,14 @@ export default function Analytics() {
       </div>
 
       <div className="text-xs text-gray-500">Role: <span className="font-mono">{role}</span></div>
+
+      {/* --- Add the Drawer here --- */}
+      <MetricsDashboardDrawer
+        token={accessToken}
+        role={role}
+        open={dashboardDrawerOpen}
+        onClose={() => setDashboardDrawerOpen(false)}
+      />
     </div>
   );
 }
