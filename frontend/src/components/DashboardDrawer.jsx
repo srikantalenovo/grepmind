@@ -1,115 +1,116 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
+import { AuthContext } from './context/AuthContext';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
-export default function DashboardDrawer({ open, onClose, dashboard, onSaved }) {
+export default function DashboardDrawer({ open, onClose, dashboardData }) {
   const { accessToken, user } = useContext(AuthContext);
   const role = user?.role || 'viewer';
-  const authHeaders = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
 
-  const [name, setName] = useState(dashboard?.name || '');
-  const [panels, setPanels] = useState(dashboard?.panels || []);
+  const [dashboards, setDashboards] = useState([]);
+  const [selectedDashboard, setSelectedDashboard] = useState(null);
+  const [panels, setPanels] = useState([]);
+
+  const fetchDashboards = async () => {
+    try {
+      const res = await axios.get(`${API}/analytics/dashboards`, {
+        headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
+      });
+      setDashboards(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
-    if (dashboard) {
-      setName(dashboard.name);
-      setPanels(dashboard.panels);
+    if (open) fetchDashboards();
+  }, [open]);
+
+  const saveDashboard = async (dashboard) => {
+    try {
+      if (dashboard.id) {
+        await axios.put(`${API}/analytics/dashboards/${dashboard.id}`, dashboard, {
+          headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
+        });
+      } else {
+        await axios.post(`${API}/analytics/dashboards`, dashboard, {
+          headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
+        });
+      }
+      fetchDashboards();
+      setSelectedDashboard(null);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || err.message);
     }
-  }, [dashboard]);
-
-  const addPanel = () => {
-    setPanels([...panels, { title: '', query: '', chartType: 'line', thresholds: {} }]);
   };
 
-  const updatePanel = (idx, panel) => {
-    const newPanels = [...panels];
-    newPanels[idx] = panel;
-    setPanels(newPanels);
-  };
-
-  const validateQuery = async (panel) => {
-     try {
-      const res = await axios.post(
-        `${API}/analytics/metrics-dashboards/${dashboard?.id ?? 'preview'}/query`,
-        { query: panel.query },
-        { headers: authHeaders }
-      );
-       return res.data.result || [];
-     } catch (e) {
-       alert('Invalid query: ' + e.response?.data?.error || e.message);
-       return [];
-     }
-   };
-
-  const saveDashboard = async () => {
-    const payload = { name, panels };
-    if (dashboard?.id) {
-       await axios.put(`${API}/analytics/metrics-dashboards/${dashboard.id}`, payload, { headers: authHeaders });
-    } else {
-      await axios.post(`${API}/analytics/metrics-dashboards`, payload, { headers: authHeaders });
-    }
-    onSaved();
-    onClose();
-  };
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full sm:w-[28rem] bg-white shadow-xl overflow-y-auto p-6">
-        <h2 className="text-lg font-semibold mb-4">{dashboard ? 'Edit Dashboard' : 'New Dashboard'}</h2>
+      <div className="absolute right-0 top-0 h-full w-full sm:w-[32rem] bg-white shadow-xl overflow-y-auto p-6">
+        <h2 className="text-lg font-semibold mb-4">Manage Dashboards</h2>
 
-        <input
-          className="w-full border rounded-lg px-3 py-2 mb-4"
-          placeholder="Dashboard Name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-        />
+        {role === 'admin' && (
+          <button
+            className="px-3 py-1 bg-blue-600 text-white rounded mb-4"
+            onClick={() => setSelectedDashboard({ name: '', panels: [] })}
+          >
+            + New Dashboard
+          </button>
+        )}
 
-        {panels.map((p, idx) => (
-          <div key={idx} className="mb-4 border p-3 rounded-lg space-y-2">
-            <input
-              className="w-full border rounded px-2 py-1"
-              placeholder="Panel Title"
-              value={p.title}
-              onChange={e => updatePanel(idx, { ...p, title: e.target.value })}
-            />
-            <input
-              className="w-full border rounded px-2 py-1"
-              placeholder="PromQL Query"
-              value={p.query}
-              onChange={e => updatePanel(idx, { ...p, query: e.target.value })}
-            />
-            <div className="flex gap-2">
-              <button
-                className="px-2 py-1 bg-blue-600 text-white rounded"
-                onClick={async () => {
-                  const data = await validateQuery(p);
-                  updatePanel(idx, { ...p, data: data.map(d => ({ time: new Date(d.value[0]*1000).toLocaleTimeString(), value: parseFloat(d.value[1]) })) });
-                }}
-              >
-                Preview
-              </button>
+        {dashboards.map((d) => (
+          <div key={d.id} className="border p-3 rounded-lg shadow-sm mb-3 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold">{d.name}</span>
+              {role === 'admin' && (
+                <div className="flex gap-2">
+                  <button className="text-green-600" onClick={() => setSelectedDashboard(d)}>
+                    Edit
+                  </button>
+                  <button
+                    className="text-red-500"
+                    onClick={async () => {
+                      await axios.delete(`${API}/analytics/dashboards/${d.id}`, {
+                        headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
+                      });
+                      fetchDashboards();
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
-            {p.data && (
-              <ResponsiveContainer width="100%" height={150}>
-                <LineChart data={p.data}>
-                  <XAxis dataKey="time" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="value" stroke="blue" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
           </div>
         ))}
 
-        <button onClick={addPanel} disabled={role==='viewer'} className="px-3 py-1 bg-green-600 text-white rounded mb-4 disabled:opacity-50">+ Add Panel</button>
-        <div className="flex justify-end gap-2">
-          <button onClick={saveDashboard} disabled={role==='viewer'} className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">Save</button>
-          <button onClick={onClose} className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800">Close</button>
+        {selectedDashboard && (
+          <div className="border p-4 rounded-lg bg-gray-50 mt-4">
+            <input
+              className="w-full border px-2 py-1 mb-2 rounded"
+              placeholder="Dashboard Name"
+              value={selectedDashboard.name}
+              onChange={(e) => setSelectedDashboard({ ...selectedDashboard, name: e.target.value })}
+            />
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded"
+              onClick={() => saveDashboard(selectedDashboard)}
+            >
+              Save
+            </button>
+          </div>
+        )}
+
+        <div className="flex justify-end mt-4">
+          <button className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800" onClick={onClose}>
+            Close
+          </button>
         </div>
       </div>
     </div>

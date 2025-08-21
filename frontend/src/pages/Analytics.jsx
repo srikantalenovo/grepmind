@@ -4,7 +4,8 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import DataSourceDrawer from '../components/DataSourceDrawer';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import MetricsDashboardDrawer from '../components/MetricsDashboardDrawer';
+import MetricsDashboardDrawer from './MetricsDashboardDrawer';
+import DashboardDrawer from './DashboardDrawer';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
@@ -16,7 +17,9 @@ export default function Analytics() {
   const role = user?.role || 'viewer';
 
   // ADD THIS
-  const [dashboardDrawerOpen, setDashboardDrawerOpen] = useState(false);
+  const [metricsOpen, setMetricsOpen] = useState(false);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+
 
   const [cluster, setCluster] = useState(null);
   const [nodes, setNodes] = useState([]);
@@ -87,12 +90,20 @@ export default function Analytics() {
           <DataSourceDrawer token={accessToken} role={role} />
           {role === 'admin' && (
               <button
-                className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow"
-                onClick={() => setDashboardDrawerOpen(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                onClick={() => setMetricsOpen(true)}
               >
-                + Create Dashboard
-              </button>
-            )}
+                Metrics Dashboards
+              </button>         
+          )}
+          {role === 'admin' && (
+              <button
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+              onClick={() => setDashboardOpen(true)}
+            >
+              Manage Dashboards
+            </button>
+          )} 
         </div>
       </div>
 
@@ -215,13 +226,15 @@ export default function Analytics() {
 
       <div className="text-xs text-gray-500">Role: <span className="font-mono">{role}</span></div>
 
-      {/* --- Add the Drawer here --- */}
+      {/* --- Add the Drawer here ---
       <MetricsDashboardDrawer
         token={accessToken}
         role={role}
         open={dashboardDrawerOpen}
         onClose={() => setDashboardDrawerOpen(false)}
-      />
+      /> */}
+      {metricsOpen && <MetricsDashboardDrawer open={metricsOpen} onClose={() => setMetricsOpen(false)} />}
+      {dashboardOpen && <DashboardDrawer open={dashboardOpen} onClose={() => setDashboardOpen(false)} />}
     </div>
   );
 }

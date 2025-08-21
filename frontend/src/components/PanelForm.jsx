@@ -1,48 +1,60 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { AuthContext } from './context/AuthContext';
 import axios from 'axios';
+
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
 export default function PanelForm({ dashboard, onClose }) {
-  const [title, setTitle] = useState('');
-  const [query, setQuery] = useState('');
-  const [chartType, setChartType] = useState('line');
-  const [warningThreshold, setWarningThreshold] = useState('');
-  const [criticalThreshold, setCriticalThreshold] = useState('');
-  const accessToken = localStorage.getItem('accessToken');
+  const { accessToken, user } = useContext(AuthContext);
+  const role = user?.role || 'viewer';
 
-  const addPanel = async () => {
-    if (!title || !query) return alert('Title & Query required');
-    const panels = dashboard.panels || [];
-    panels.push({
-      id: crypto.randomUUID(),
-      title,
-      query,
-      chartType,
-      thresholds: { warning: warningThreshold, critical: criticalThreshold },
-    });
-    await axios.put(`${API}/analytics/dashboards/${dashboard.id}`, { panels }, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    onClose();
+  const [panels, setPanels] = useState(dashboard?.panels || []);
+
+  const addPanel = () => setPanels([...panels, { title: '', query: '', chartType: 'line', thresholds: {} }]);
+
+  const updatePanel = (idx, panel) => {
+    const newPanels = [...panels];
+    newPanels[idx] = panel;
+    setPanels(newPanels);
+  };
+
+  const savePanels = async () => {
+    try {
+      const payload = { ...dashboard, panels };
+      await axios.put(`${API}/analytics/dashboards/${dashboard.id}`, payload, {
+        headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
+      });
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || err.message);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/20 flex justify-center items-start pt-20">
-      <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md space-y-3">
-        <h3 className="text-lg font-semibold">Add Panel</h3>
-        <input className="w-full border px-3 py-2 rounded-lg" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
-        <input className="w-full border px-3 py-2 rounded-lg" placeholder="PromQL Query" value={query} onChange={e => setQuery(e.target.value)} />
-        <input className="w-full border px-3 py-2 rounded-lg" placeholder="Warning Threshold" value={warningThreshold} onChange={e => setWarningThreshold(e.target.value)} />
-        <input className="w-full border px-3 py-2 rounded-lg" placeholder="Critical Threshold" value={criticalThreshold} onChange={e => setCriticalThreshold(e.target.value)} />
-        <select className="w-full border px-3 py-2 rounded-lg" value={chartType} onChange={e => setChartType(e.target.value)}>
-          <option value="line">Line</option>
-          <option value="area">Area</option>
-        </select>
-        <div className="flex justify-end gap-2 pt-2">
-          <button className="px-3 py-2 bg-gray-500 text-white rounded-lg" onClick={onClose}>Cancel</button>
-          <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={addPanel}>Add Panel</button>
+    <div className="mt-4 border p-4 rounded-lg bg-gray-50">
+      {panels.map((p, idx) => (
+        <div key={idx} className="mb-2 space-y-1">
+          <input
+            className="w-full border px-2 py-1 rounded"
+            placeholder="Panel Title"
+            value={p.title}
+            onChange={(e) => updatePanel(idx, { ...p, title: e.target.value })}
+          />
+          <input
+            className="w-full border px-2 py-1 rounded"
+            placeholder="PromQL Query"
+            value={p.query}
+            onChange={(e) => updatePanel(idx, { ...p, query: e.target.value })}
+          />
         </div>
-      </div>
+      ))}
+      <button className="px-3 py-1 bg-green-600 text-white rounded mb-2" onClick={addPanel}>
+        + Add Panel
+      </button>
+      <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={savePanels}>
+        Save Panels
+      </button>
     </div>
   );
 }
