@@ -81,8 +81,18 @@ export default function Analytics() {
             Source: {sources.prometheus ? 'Prometheus + K8s' : 'K8s only'}
           </span>
           <DataSourceDrawer token={accessToken} role={role} />
+          {role === 'admin' && (
+              <button
+                className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow"
+                onClick={() => setDashboardDrawerOpen(true)}
+              >
+                + Create Dashboard
+              </button>
+            )}
         </div>
       </div>
+
+  
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
