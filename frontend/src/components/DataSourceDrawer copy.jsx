@@ -1,42 +1,30 @@
+// src/components/DataSourceDrawer.jsx
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
-export default function DataSourceDrawer({ token }) {
+/** Minimal drawer without extra UI libs */
+export default function DataSourceDrawer({ token, role }) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
-  const [userRole, setUserRole] = useState('viewer'); // default role
 
-  // ✅ Fetch user role from backend
   useEffect(() => {
     if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
-
-    // Fetch user info (role)
-    axios.get(`${API}/auth/me`, { headers })
-      .then(res => {
-        setUserRole(res.data.user.role || 'viewer');
-      })
-      .catch(() => setUserRole('viewer'));
-
-    // Fetch Prometheus URL
-    axios.get(`${API}/datasources`, { headers })
-      .then(res => {
-        const prom = (res.data || []).find(x => x.type === 'prometheus');
-        if (prom) setUrl(prom.url);
-      })
-      .catch(() => {});
+    axios.get(`${API}/datasources`, { headers }).then(res => {
+      const prom = (res.data || []).find(x => x.type === 'prometheus');
+      if (prom) setUrl(prom.url);
+    }).catch(()=>{});
   }, [token]);
 
   const save = async () => {
-    if (userRole !== 'admin') {   // use fetched role
+    if (role !== 'admin') {
       alert('Only admin can change data sources');
       return;
     }
-
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
