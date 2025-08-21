@@ -81,7 +81,7 @@ router.post("/login", async (req, res) => {
 
     await prisma.refreshToken.create({
       data: {
-        tokenHash: bcrypt.hashSync(refreshToken, 90),
+        tokenHash: bcrypt.hashSync(refreshToken, 10),
         userId: user.id,
         expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       },
@@ -128,7 +128,7 @@ router.post("/refresh", async (req, res) => {
 
     await prisma.refreshToken.create({
       data: {
-        tokenHash: bcrypt.hashSync(newRefresh, 90),
+        tokenHash: bcrypt.hashSync(newRefresh, 10),
         userId,
         expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       },
