@@ -2,6 +2,7 @@
 import { coreV1Api, appsV1Api, customObjectsApi, networkingV1Api } from '../config/k8sClient.js';
 import jwt from 'jsonwebtoken';
 import { promQuery, getPrometheusUrl } from '../utils/prometheusClient.js';
+import  prisma  from '../../src/prismaClient.js';
 
 /** Return which data sources are active */
 export const getAnalyticsDataSources = async (_req, res) => {
