@@ -1,55 +1,28 @@
-// src/components/DataSourceDrawer.jsx
-import React, { useEffect, useState } from 'react';
-import yaml from 'js-yaml';
+import React, { useEffect, useState, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
+import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
+const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
-/** apiFetch with automatic role header and JSON handling */
-async function apiFetch(path, opts = {}, role = 'viewer') {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    credentials: 'include', // send cookies for refresh tokens
-    headers: {
-      'x-user-role': role,
-      ...(opts.headers || {}),
-      ...((opts.body && !opts.headers?.['Content-Type']) ? { 'Content-Type': 'application/json' } : {}),
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
-  }
-
-  const ct = res.headers.get('content-type') || '';
-  return ct.includes('application/json') ? res.json() : res.text();
-}
-
-// ---------- Component ----------
 export default function DataSourceDrawer() {
+  const { accessToken, user } = useContext(AuthContext);
+  const role = user?.role || 'viewer';
+
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
-  const [role, setRole] = useState('viewer'); // default role
 
-  // Fetch role and Prometheus URL whenever drawer opens
   useEffect(() => {
-    if (!open) return;
-
-    (async () => {
-      try {
-        const user = await apiFetch('/auth/me'); // get user info & role
-        setRole(user?.role || 'viewer');
-
-        const datasources = await apiFetch('/datasources', {}, user?.role);
-        const prom = (datasources || []).find(x => x.type === 'prometheus');
+    if (!open || !accessToken) return;
+    const headers = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
+    axios.get(`${API}/datasources`, { headers })
+      .then(res => {
+        const prom = (res.data || []).find(x => x.type === 'prometheus');
         if (prom) setUrl(prom.url);
-      } catch (e) {
-        console.error('Failed to load datasource or role:', e.message);
-      }
-    })();
-  }, [open]);
+      })
+      .catch(() => {});
+  }, [open, accessToken, role]);
 
   const save = async () => {
     if (role !== 'admin') {
@@ -58,13 +31,11 @@ export default function DataSourceDrawer() {
     }
     setLoading(true);
     try {
-      await apiFetch('/datasources/prometheus', {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-      }, role);
+      const headers = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
+      await axios.post(`${API}/datasources/prometheus`, { url }, { headers });
       setStatus('Saved');
     } catch (e) {
-      setStatus('Failed: ' + e.message);
+      setStatus('Failed: ' + (e.response?.data?.message || e.message));
     } finally {
       setLoading(false);
     }
@@ -72,23 +43,26 @@ export default function DataSourceDrawer() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="px-3 py-2 rounded-xl border shadow bg-white"
-      >
+      <button onClick={() => setOpen(true)} className="px-3 py-2 rounded-xl border shadow bg-white">
         ⚙️ Datasource
       </button>
 
       {open && (
         <div className="fixed inset-0 z-50">
+          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-0 h-full w-full sm:w-[28rem] bg-white shadow-xl p-6 overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Prometheus Data Source</h2>
-              <button onClick={() => setOpen(false)} className="text-gray-500">✕</button>
+          
+          {/* Drawer Panel */}
+          <div className="absolute right-0 top-0 h-full w-full sm:w-[28rem] bg-white shadow-xl overflow-y-auto flex flex-col">
+            
+            {/* Header */}
+            <div className="px-4 py-3 bg-indigo-700 text-white">
+              <div className="text-sm">Prometheus Data Source</div>
+              <div className="text-lg font-semibold truncate">Datasource · Prometheus</div>
             </div>
 
-            <div className="space-y-3">
+            {/* Body */}
+            <div className="p-6 space-y-3 flex-1">
               <label className="block text-sm text-gray-600">URL</label>
               <input
                 className="w-full border rounded-lg px-3 py-2"
