@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
-import { AuthContext } from './context/AuthContext';
+import { AuthContext } from '../context/AuthContext';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
