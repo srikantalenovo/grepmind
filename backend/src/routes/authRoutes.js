@@ -8,10 +8,10 @@ const router = express.Router();
 
 const generateTokens = (userId) => {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: "15m",
+    expiresIn: "1d",
   });
   const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: "7d",
+    expiresIn: "90d",
   });
   return { accessToken, refreshToken };
 };
@@ -48,7 +48,7 @@ router.post("/signup", async (req, res) => {
       data: {
         tokenHash: bcrypt.hashSync(refreshToken, 10),
         userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       },
     });
 
@@ -81,9 +81,9 @@ router.post("/login", async (req, res) => {
 
     await prisma.refreshToken.create({
       data: {
-        tokenHash: bcrypt.hashSync(refreshToken, 10),
+        tokenHash: bcrypt.hashSync(refreshToken, 90),
         userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       },
     });
 
@@ -128,9 +128,9 @@ router.post("/refresh", async (req, res) => {
 
     await prisma.refreshToken.create({
       data: {
-        tokenHash: bcrypt.hashSync(newRefresh, 10),
+        tokenHash: bcrypt.hashSync(newRefresh, 90),
         userId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       },
     });
 

@@ -1,7 +1,7 @@
 import * as authService from '../services/authService.js';
 
 function setRefreshCookie(res, refreshPlain) {
-  const days = parseInt(process.env.REFRESH_TOKEN_EXPIRES_DAYS || '30', 10);
+  const days = parseInt(process.env.REFRESH_TOKEN_EXPIRES_DAYS || '30', 90);
   res.cookie('jid', refreshPlain, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
