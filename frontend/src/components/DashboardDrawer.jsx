@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-const API = import.meta.env.VITE_API_URL;
+const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
 export default function DashboardDrawer({ open, onClose, dashboard, onSaved }) {
+  const { accessToken, user } = useContext(AuthContext);
+  const role = user?.role || 'viewer';
+  const authHeaders = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
+
   const [name, setName] = useState(dashboard?.name || '');
   const [panels, setPanels] = useState(dashboard?.panels || []);
 
@@ -26,21 +31,25 @@ export default function DashboardDrawer({ open, onClose, dashboard, onSaved }) {
   };
 
   const validateQuery = async (panel) => {
-    try {
-      const res = await axios.post(`${API}/analytics/metrics-dashboards/${dashboard?.id || ''}/query`, { query: panel.query });
-      return res.data.result || [];
-    } catch (e) {
-      alert('Invalid query: ' + e.response?.data?.error || e.message);
-      return [];
-    }
-  };
+     try {
+      const res = await axios.post(
+        `${API}/analytics/metrics-dashboards/${dashboard?.id ?? 'preview'}/query`,
+        { query: panel.query },
+        { headers: authHeaders }
+      );
+       return res.data.result || [];
+     } catch (e) {
+       alert('Invalid query: ' + e.response?.data?.error || e.message);
+       return [];
+     }
+   };
 
   const saveDashboard = async () => {
     const payload = { name, panels };
     if (dashboard?.id) {
-      await axios.put(`${API}/analytics/metrics-dashboards/${dashboard.id}`, payload);
+       await axios.put(`${API}/analytics/metrics-dashboards/${dashboard.id}`, payload, { headers: authHeaders });
     } else {
-      await axios.post(`${API}/analytics/metrics-dashboards`, payload);
+      await axios.post(`${API}/analytics/metrics-dashboards`, payload, { headers: authHeaders });
     }
     onSaved();
     onClose();
@@ -97,9 +106,9 @@ export default function DashboardDrawer({ open, onClose, dashboard, onSaved }) {
           </div>
         ))}
 
-        <button onClick={addPanel} className="px-3 py-1 bg-green-600 text-white rounded mb-4">+ Add Panel</button>
+        <button onClick={addPanel} disabled={role==='viewer'} className="px-3 py-1 bg-green-600 text-white rounded mb-4 disabled:opacity-50">+ Add Panel</button>
         <div className="flex justify-end gap-2">
-          <button onClick={saveDashboard} className="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
+          <button onClick={saveDashboard} disabled={role==='viewer'} className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50">Save</button>
           <button onClick={onClose} className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800">Close</button>
         </div>
       </div>
