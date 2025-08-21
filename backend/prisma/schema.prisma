@@ -49,20 +49,21 @@ model DataSource {
 }
 
 
-model MetricsDashboard {
-  id        String   @id @default(cuid())
-  name      String
-  panels    Json     // Array of panels with PromQL, chart type, thresholds
-  createdBy String
-  createdAt DateTime @default(now())
+model Dashboard {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  panels      Panel[]
 }
 
-model MetricsPanel {
-  id          String   @id @default(cuid())
-  dashboardId String
+model Panel {
+  id          Int      @id @default(autoincrement())
   title       String
-  query       String
+  promql      String
   chartType   String
-  thresholds  Json?    // optional thresholds
-  createdAt   DateTime @default(now())
+  thresholds  Json
+  dashboardId Int
+  dashboard   Dashboard @relation(fields: [dashboardId], references: [id])
 }
