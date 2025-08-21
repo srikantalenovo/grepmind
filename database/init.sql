@@ -86,3 +86,25 @@ DROP TRIGGER IF EXISTS set_updated_at_on_datasource ON "DataSource";
 CREATE TRIGGER set_updated_at_on_datasource
 BEFORE UPDATE ON "DataSource"
 FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
+
+
+
+-- Table for storing dashboards
+CREATE TABLE IF NOT EXISTS "MetricsDashboard" (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),  -- cuid equivalent
+    name TEXT NOT NULL,
+    panels JSON NOT NULL,
+    "createdBy" TEXT NOT NULL,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Table for storing panels
+CREATE TABLE IF NOT EXISTS "MetricsPanel" (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),  -- cuid equivalent
+    "dashboardId" TEXT NOT NULL REFERENCES "MetricsDashboard"(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    query TEXT NOT NULL,
+    "chartType" TEXT NOT NULL,
+    thresholds JSON,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

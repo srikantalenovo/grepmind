@@ -8,6 +8,7 @@ import analyzerRoutes from './routes/analyzerRoutes.js';
 import helmRoutes from './routes/helmRoutes.js'
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import dataSourceRoutes from './routes/dataSourceRoutes.js';
+import metricsDashboardRoutes from './routes/metricsDashboardRoutes.js';
 
 import 'dotenv/config';
 
@@ -30,7 +31,8 @@ app.use('/analyzer', analyzerRoutes);
 app.use('/api/analyzer', analyzerRoutes);
 app.use('/api/helm', helmRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/datasources', dataSourceRoutes);  
+app.use('/api/datasources', dataSourceRoutes);
+app.use('/api/analytics/metrics-dashboards', metricsDashboardRoutes);  
 
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

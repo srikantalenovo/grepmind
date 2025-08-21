@@ -47,3 +47,22 @@ model DataSource {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+
+model MetricsDashboard {
+  id        String   @id @default(cuid())
+  name      String
+  panels    Json     // Array of panels with PromQL, chart type, thresholds
+  createdBy String
+  createdAt DateTime @default(now())
+}
+
+model MetricsPanel {
+  id          String   @id @default(cuid())
+  dashboardId String
+  title       String
+  query       String
+  chartType   String
+  thresholds  Json?    // optional thresholds
+  createdAt   DateTime @default(now())
+}
