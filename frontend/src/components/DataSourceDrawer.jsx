@@ -26,10 +26,14 @@ export default function DataSourceDrawer({ token, role }) {
   // Validate Prometheus URL by calling /api/v1/query?query=up
   const validatePrometheus = async (testUrl) => {
     try {
-      const res = await axios.get(`${testUrl.replace(/\/$/, '')}/api/v1/query?query=up`, { timeout: 5000 });
+      let url = testUrl.trim().replace(/\/$/, '');
+      if (!/^https?:\/\//.test(url)) url = 'http://' + url; // auto-add scheme
+      const res = await axios.get(`${url}/api/v1/query?query=up`, { timeout: 15000 });
       return res.data?.status === 'success';
     } catch (err) {
-      throw new Error(err.message || 'Connection failed');
+      throw new Error(err.response?.status
+        ? `HTTP ${err.response.status} - ${err.response.statusText}`
+        : err.message || 'Connection failed');
     }
   };
 
