@@ -26,15 +26,14 @@ export default function DataSourceDrawer() {
       .catch(() => {});
   }, [open, accessToken, role]);
 
-  // Validate Prometheus URL
+  // Frontend URL validation
   const validatePrometheus = async (testUrl) => {
     if (!testUrl) throw new Error('URL is empty');
     let urlToTest = testUrl.trim();
     if (!/^https?:\/\//i.test(urlToTest)) urlToTest = 'http://' + urlToTest;
     urlToTest = urlToTest.replace(/\/$/, '');
-
     try {
-      const res = await axios.get(`${urlToTest}/api/v1/query?query=up`, { timeout: 5000 });
+      const res = await axios.get(`${urlToTest}/api/v1/query?query=up`, { timeout: 15000 });
       if (res.data?.status === 'success') return true;
       throw new Error('Prometheus query returned non-success status');
     } catch (err) {
@@ -44,7 +43,6 @@ export default function DataSourceDrawer() {
     }
   };
 
-  // Save Prometheus URL
   const save = async () => {
     if (role !== 'admin') {
       alert('Only admin can change data sources');
@@ -72,10 +70,7 @@ export default function DataSourceDrawer() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="px-3 py-2 rounded-xl border shadow bg-white"
-      >
+      <button onClick={() => setOpen(true)} className="px-3 py-2 rounded-xl border shadow bg-white">
         ⚙️ Datasource
       </button>
 
@@ -87,9 +82,7 @@ export default function DataSourceDrawer() {
             {/* Header */}
             <div className="px-4 py-3 bg-indigo-700 text-white">
               <div className="text-sm">Prometheus Data Source</div>
-              <div className="text-lg font-semibold truncate">
-                Role: <span className="font-mono">{role}</span>
-              </div>
+              <div className="text-lg font-semibold truncate">Role: <span className="font-mono">{role}</span></div>
             </div>
 
             {/* Body */}
