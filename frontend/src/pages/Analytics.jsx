@@ -4,8 +4,8 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import DataSourceDrawer from '../components/DataSourceDrawer';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import MetricsDashboardDrawer from './MetricsDashboardDrawer';
-import DashboardDrawer from './DashboardDrawer';
+import MetricsDashboardDrawer from '../components/MetricsDashboardDrawer';
+import DashboardDrawer from '../components/DashboardDrawer';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
