@@ -11,7 +11,15 @@ import {
   getPodMetrics,
   getDeploymentsStatus,
   getNetworkOverview,
-  streamAnalytics   
+  streamAnalytics,
+  getDashboards,
+  createDashboard,
+  updateDashboard,
+  deleteDashboard,
+  getPanels,
+  createPanel,
+  updatePanel,
+  deletePanel,       
 } from '../controllers/analyticsController.js';
 
 const router = express.Router();
@@ -34,6 +42,20 @@ router.get('/stream', streamAnalytics);
 router.get('/data-sources', authenticate, rbac(['viewer','editor','admin']), getAnalyticsDataSources);
 router.get('/network-metrics', authenticate, rbac(['editor','admin']), getNetworkMetrics);
 router.get('/filesystem-metrics', authenticate, rbac(['editor','admin']), getFilesystemMetrics);
+
+
+router.get("/dashboards", rbac(["admin", "editor", "viewer"]), getDashboards);
+router.post("/dashboards", rbac(["admin", "editor"]), createDashboard);
+router.put("/dashboards/:id", rbac(["admin", "editor"]), updateDashboard);
+router.delete("/dashboards/:id", rbac(["admin"]), deleteDashboard);
+
+/* PANELS (scoped under dashboards) */
+router.get("/dashboards/:dashboardId/panels", rbac(["admin", "editor", "viewer"]), getPanels);
+router.post("/dashboards/:dashboardId/panels", rbac(["admin", "editor"]), createPanel);
+
+/* PANELS (single operations by ID) */
+router.put("/panels/:id", rbac(["admin", "editor"]), updatePanel);
+router.delete("/panels/:id", rbac(["admin"]), deletePanel);
 
 export default router;
 

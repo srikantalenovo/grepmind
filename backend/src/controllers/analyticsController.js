@@ -326,3 +326,122 @@ export const streamAnalytics = async (req, res) => {
   await push();
   const id = setInterval(() => { if (!closed) push(); else clearInterval(id); }, 5000);
 };
+
+
+/* -------------------- DASHBOARDS -------------------- */
+
+// GET all dashboards with panels
+export const getDashboards = async (req, res) => {
+  try {
+    const dashboards = await prisma.dashboard.findMany({
+      include: { panels: true },
+    });
+    res.json(dashboards);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch dashboards", details: err.message });
+  }
+};
+
+// CREATE dashboard
+export const createDashboard = async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const dashboard = await prisma.dashboard.create({
+      data: { name, description },
+    });
+    res.json(dashboard);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create dashboard", details: err.message });
+  }
+};
+
+// UPDATE dashboard
+export const updateDashboard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    const updated = await prisma.dashboard.update({
+      where: { id: parseInt(id) },
+      data: { name, description },
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update dashboard", details: err.message });
+  }
+};
+
+// DELETE dashboard
+export const deleteDashboard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.dashboard.delete({ where: { id: parseInt(id) } });
+    res.json({ message: "Dashboard deleted" });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete dashboard", details: err.message });
+  }
+};
+
+/* -------------------- PANELS -------------------- */
+
+// GET panels for a dashboard
+export const getPanels = async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    const panels = await prisma.panel.findMany({
+      where: { dashboardId: parseInt(dashboardId) },
+    });
+    res.json(panels);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch panels", details: err.message });
+  }
+};
+
+// CREATE panel in a dashboard
+export const createPanel = async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    const { title, promql, chartType, thresholds } = req.body;
+
+    const panel = await prisma.panel.create({
+      data: {
+        title,
+        promql,
+        chartType,
+        thresholds,
+        dashboardId: parseInt(dashboardId),
+      },
+    });
+
+    res.json(panel);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create panel", details: err.message });
+  }
+};
+
+// UPDATE panel
+export const updatePanel = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, promql, chartType, thresholds } = req.body;
+
+    const updated = await prisma.panel.update({
+      where: { id: parseInt(id) },
+      data: { title, promql, chartType, thresholds },
+    });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update panel", details: err.message });
+  }
+};
+
+// DELETE panel
+export const deletePanel = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.panel.delete({ where: { id: parseInt(id) } });
+    res.json({ message: "Panel deleted" });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete panel", details: err.message });
+  }
+};

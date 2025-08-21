@@ -108,3 +108,56 @@ CREATE TABLE IF NOT EXISTS "MetricsPanel" (
     thresholds JSON,
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+
+-- Create Dashboard and Panel tables matching schema.prisma
+
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- DASHBOARD TABLE
+CREATE TABLE "Dashboard" (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- PANEL TABLE
+CREATE TABLE "Panel" (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    promql TEXT NOT NULL,
+    "chartType" VARCHAR(100) NOT NULL,
+    thresholds JSONB NOT NULL,
+    "dashboardId" INT NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_dashboard FOREIGN KEY ("dashboardId")
+      REFERENCES "Dashboard"(id) ON DELETE CASCADE
+);
+
+-- Indexes for performance
+CREATE INDEX idx_dashboard_name ON "Dashboard"(name);
+CREATE INDEX idx_panel_dashboardId ON "Panel"("dashboardId");
+
+-- Trigger function to update updatedAt automatically
+CREATE OR REPLACE FUNCTION update_updatedAt_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW."updatedAt" = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Attach triggers
+CREATE TRIGGER update_dashboard_updatedAt
+BEFORE UPDATE ON "Dashboard"
+FOR EACH ROW
+EXECUTE PROCEDURE update_updatedAt_column();
+
+CREATE TRIGGER update_panel_updatedAt
+BEFORE UPDATE ON "Panel"
+FOR EACH ROW
+EXECUTE PROCEDURE update_updatedAt_column();
