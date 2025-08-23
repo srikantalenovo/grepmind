@@ -677,14 +677,39 @@ export const deletePanel = async (req, res) => {
 };
 
 // Prometheus Query
+// export const runQuery = async (req, res) => {
+//   try {
+//     const { query, range } = req.body;
+//     const prometheusUrl = process.env.PROMETHEUS_URL || "http://prometheus-server.monitoring.svc.cluster.local";
+
+//     let url;
+//     if (range) {
+//       url = `${prometheusUrl}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${range.from}&end=${range.to}&step=${range.step}`;
+//     } else {
+//       url = `${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`;
+//     }
+
+//     const response = await axios.get(url);
+//     res.json(response.data);
+//   } catch (err) {
+//     res.status(500).json({ error: "Prometheus query failed", details: err.message });
+//   }
+// };
+
 export const runQuery = async (req, res) => {
   try {
     const { query, range } = req.body;
     const prometheusUrl = process.env.PROMETHEUS_URL || "http://prometheus-server.monitoring.svc.cluster.local";
 
     let url;
+
     if (range) {
-      url = `${prometheusUrl}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${range.from}&end=${range.to}&step=${range.step}`;
+      // Ensure we convert to UNIX seconds
+      const start = Math.floor(new Date(range.from).getTime() / 1000);
+      const end = Math.floor(new Date(range.to).getTime() / 1000);
+      const step = Number(range.step); // make sure step is a number in seconds
+
+      url = `${prometheusUrl}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${end}&step=${step}`;
     } else {
       url = `${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`;
     }
@@ -692,6 +717,9 @@ export const runQuery = async (req, res) => {
     const response = await axios.get(url);
     res.json(response.data);
   } catch (err) {
-    res.status(500).json({ error: "Prometheus query failed", details: err.message });
+    res.status(500).json({
+      error: "Prometheus query failed",
+      details: err.response?.data || err.message,
+    });
   }
 };
