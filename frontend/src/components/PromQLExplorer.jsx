@@ -17,7 +17,7 @@ export default function PromQLExplorer() {
     try {
       setStatus('Running…');
       const headers = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
-      const res = await axios.post(`${API}/analytics/query`, { query }, { headers });
+      const res = await axios.post(`${API}/analytics/datasources/query`, { query }, { headers });
       setResult(res.data.data);
       setStatus('OK');
     } catch (e) {

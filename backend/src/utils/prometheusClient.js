@@ -45,12 +45,12 @@
 // }
 
 // /** Rewrite external Prometheus URLs to internal cluster DNS if needed */
-// function getClusterPrometheusUrl(externalUrl) {
-//   if (isRunningInCluster() && externalUrl.includes('prometheus.sritechhub.com')) {
-//     return 'http://prometheus-server.monitoring.svc.cluster.local:80';
-//   }
-//   return externalUrl;
-// }
+function getClusterPrometheusUrl(externalUrl) {
+  if (isRunningInCluster() && externalUrl.includes('prometheus.sritechhub.com')) {
+    return 'http://prometheus-server.monitoring.svc.cluster.local:80';
+  }
+  return externalUrl;
+}
 
 // /** Run a Prometheus instant query. Throws if not configured or on error. */
 export async function promQuery(query) {

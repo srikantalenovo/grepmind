@@ -65,7 +65,7 @@ router.get('/datasources', rbac(['admin','editor','viewer']), listDataSources);
 router.post('/datasources/prometheus', rbac(['admin']), upsertPrometheus);
 
 /** PromQL validation / explorer */
-router.post('/analytics/query', rbac(['admin','editor','viewer']), queryPromQL);
+router.post('/datasources/query', rbac(['admin','editor','viewer']), queryPromQL);
 
 /** Dashboards */
 router.get('/dashboards', rbac(['admin','editor','viewer']), getDashboards);

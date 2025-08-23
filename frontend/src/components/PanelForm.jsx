@@ -22,7 +22,7 @@ export default function PanelForm({ dashboard, onClose, onSaved }) {
 
   const previewQuery = async () => {
     try {
-      const res = await axios.post(`${API}/analytics/query`, { query: panel.promql }, { headers });
+      const res = await axios.post(`${API}/analytics/datasources/query`, { query: panel.promql }, { headers });
       setPreview(res.data.data);
     } catch (e) {
       alert('Preview failed: ' + (e.response?.data?.details || e.message));
