@@ -584,7 +584,7 @@
 
 
 // controllers/analyticsController.js
-import prisma from "../prismaClient";
+import  prisma  from '../../src/prismaClient.js';
 import axios from "axios";
 
 // Dashboards
