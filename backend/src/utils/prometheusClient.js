@@ -53,23 +53,23 @@
 // }
 
 // /** Run a Prometheus instant query. Throws if not configured or on error. */
-// export async function promQuery(query) {
-//   let PROM_URL = await getPrometheusUrl();
-//   if (!PROM_URL) throw new Error('Prometheus not configured');
+export async function promQuery(query) {
+  let PROM_URL = await getPrometheusUrl();
+  if (!PROM_URL) throw new Error('Prometheus not configured');
 
-//   // Rewrite to internal URL if inside cluster
-//   PROM_URL = getClusterPrometheusUrl(PROM_URL);
+  // Rewrite to internal URL if inside cluster
+  PROM_URL = getClusterPrometheusUrl(PROM_URL);
 
-//   const url = `${PROM_URL.replace(/\/$/, '')}/api/v1/query?query=${encodeURIComponent(query)}`;
+  const url = `${PROM_URL.replace(/\/$/, '')}/api/v1/query?query=${encodeURIComponent(query)}`;
 
-//   const res = await fetch(url);
-//   if (!res.ok) throw new Error(`Prometheus error: ${res.status}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Prometheus error: ${res.status}`);
 
-//   const data = await res.json();
-//   if (data.status !== 'success') throw new Error('Prometheus query failed');
+  const data = await res.json();
+  if (data.status !== 'success') throw new Error('Prometheus query failed');
 
-//   return data.data.result;
-// }
+  return data.data.result;
+}
 
 
 // src/utils/prometheusClient.js

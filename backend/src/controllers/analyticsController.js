@@ -3,7 +3,7 @@ import { coreV1Api, appsV1Api, customObjectsApi, networkingV1Api } from '../conf
 import jwt from 'jsonwebtoken';
 //import { promQuery, getPrometheusUrl } from '../utils/prometheusClient.js';
 import  prisma  from '../../src/prismaClient.js';
-import { promQueryInstant } from '../utils/prometheusClient.js';
+import { promQueryInstant, getPrometheusUrl, promQuery } from '../utils/prometheusClient.js';
 
 /** Return which data sources are active */
 export const getAnalyticsDataSources = async (_req, res) => {
