@@ -40,9 +40,9 @@
 // }
 
 // /** Detect if the backend is running inside Kubernetes by checking environment variables. */
-// function isRunningInCluster() {
-//   return process.env.KUBERNETES_SERVICE_HOST && process.env.KUBERNETES_SERVICE_PORT;
-// }
+function isRunningInCluster() {
+  return process.env.KUBERNETES_SERVICE_HOST && process.env.KUBERNETES_SERVICE_PORT;
+}
 
 // /** Rewrite external Prometheus URLs to internal cluster DNS if needed */
 function getClusterPrometheusUrl(externalUrl) {

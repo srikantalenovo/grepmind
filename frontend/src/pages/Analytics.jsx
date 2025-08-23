@@ -1,255 +1,560 @@
-// src/pages/Analytics.jsx (Prometheus-aware)
-import React, { useEffect, useMemo, useState, useContext } from 'react';
+// src/pages/Analytics.jsx
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import DataSourceDrawer from '../components/DataSourceDrawer';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import MetricsDashboardDrawer from '../components/MetricsDashboardDrawer';
-import DashboardDrawer from '../components/DashboardDrawer';
+import {
+  LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, PieChart, Pie, Cell
+} from 'recharts';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
-function bytesToGiB(x){ return x ? x / (1024 ** 3) : 0; }
-function round(n, d=2){ const p = 10**d; return Math.round(n*p)/p; }
+/* ----------------------------- helpers ------------------------------ */
+const headersFor = (token, role) => ({
+  Authorization: `Bearer ${token}`,
+  'x-user-role': role
+});
 
+const Chart = ({ panel, data }) => {
+  if (!data || data.length === 0) return <div className="text-xs text-gray-500">No data</div>;
+
+  const viz = panel.visualizationConfig || {};
+  const chartType = (panel.chartType || 'line').toLowerCase();
+
+  if (chartType === 'bar') {
+    return (
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="time" hide={data.length > 30} />
+          <YAxis />
+          <Tooltip />
+          <Bar dataKey="value" />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  if (chartType === 'pie') {
+    // Aggregate for a quick pie (take last points of multiple series if present)
+    const grouped = Object.values(data.reduce((acc, d) => {
+      const k = d.series || panel.title || 'series';
+      acc[k] = { name: k, value: (acc[k]?.value || 0) + (d.value || 0) };
+      return acc;
+    }, {}));
+    return (
+      <ResponsiveContainer width="100%" height={220}>
+        <PieChart>
+          <Pie dataKey="value" data={grouped} outerRadius={80} label />
+          {grouped.map((_, i) => <Cell key={i} />)}
+          <Tooltip />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  // default line
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data}>
+        <Line type="monotone" dataKey="value" strokeWidth={2} dot={false} />
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="time" hide={data.length > 30} />
+        <YAxis />
+        <Tooltip />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+};
+
+const panelThresholdClass = (thresholds, v) => {
+  if (!thresholds) return '';
+  const warn = Number.isFinite(thresholds.warning) ? thresholds.warning : undefined;
+  const crit = Number.isFinite(thresholds.critical) ? thresholds.critical : undefined;
+  if (crit != null && v >= crit) return 'ring-2 ring-red-500';
+  if (warn != null && v >= warn) return 'ring-2 ring-amber-400';
+  return '';
+};
+
+/* ----------------------- Panel Editor Drawer ------------------------ */
+const PanelEditorDrawer = ({
+  open, onClose, token, role, dashboardId, panel, onSaved
+}) => {
+  const isEdit = !!panel?.id;
+  const [title, setTitle] = useState(panel?.title || '');
+  const [promql, setPromql] = useState(panel?.promql || '');
+  const [chartType, setChartType] = useState(panel?.chartType || 'line');
+  const [thresholds, setThresholds] = useState(panel?.thresholds || { warning: '', critical: '' });
+  const [visualizationConfig, setVisualizationConfig] = useState(panel?.visualizationConfig || {});
+  const [layout, setLayout] = useState(panel?.layout || { w: 6, h: 3 });
+  const [preview, setPreview] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle(panel?.title || '');
+    setPromql(panel?.promql || '');
+    setChartType(panel?.chartType || 'line');
+    setThresholds(panel?.thresholds || { warning: '', critical: '' });
+    setVisualizationConfig(panel?.visualizationConfig || {});
+    setLayout(panel?.layout || { w: 6, h: 3 });
+    setPreview([]);
+  }, [open, panel]);
+
+  const doPreview = async () => {
+    if (!promql?.trim()) return;
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${API}/analytics/query`,
+        { query: promql },
+        { headers: headersFor(token, role) }
+      );
+      // Expecting backend returns array of { ts, value, series? }
+      const rows = (res.data?.data || []).map(r => ({
+        time: r.ts ? new Date(r.ts).toLocaleTimeString() : '',
+        value: Number(r.value || r.val || 0),
+        series: r.series
+      }));
+      setPreview(rows);
+    } catch (e) {
+      alert(`Preview failed: ${e.response?.data?.error || e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const save = async () => {
+    if (!title.trim() || !promql.trim()) {
+      alert('Title and PromQL are required');
+      return;
+    }
+    const payload = {
+      title,
+      promql,
+      chartType,
+      thresholds: {
+        warning: thresholds.warning === '' ? null : Number(thresholds.warning),
+        critical: thresholds.critical === '' ? null : Number(thresholds.critical)
+      },
+      visualizationConfig,
+      layout
+    };
+    try {
+      if (isEdit) {
+        await axios.put(
+          `${API}/analytics/dashboards/${dashboardId}/panels/${panel.id}`,
+          payload,
+          { headers: headersFor(token, role) }
+        );
+      } else {
+        await axios.post(
+          `${API}/analytics/dashboards/${dashboardId}/panels`,
+          payload,
+          { headers: headersFor(token, role) }
+        );
+      }
+      onSaved?.();
+      onClose?.();
+    } catch (e) {
+      alert(`Save failed: ${e.response?.data?.error || e.message}`);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="absolute right-0 top-0 h-full w-full sm:w-[36rem] bg-white shadow-xl overflow-y-auto">
+        <div className="px-4 py-3 bg-indigo-700 text-white">
+          <div className="text-sm">{isEdit ? 'Edit Panel' : 'Add Panel'}</div>
+          <div className="text-lg font-semibold truncate">Dashboard Panel Editor</div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Title</label>
+            <input
+              className="w-full border rounded-xl px-3 py-2"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="HTTP Requests Rate"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">PromQL</label>
+            <textarea
+              className="w-full border rounded-xl px-3 py-2 min-h-[96px]"
+              value={promql}
+              onChange={e => setPromql(e.target.value)}
+              placeholder="rate(http_requests_total[5m])"
+            />
+            <div className="mt-2">
+              <button
+                onClick={doPreview}
+                className="px-3 py-2 rounded-xl border shadow bg-white disabled:opacity-50"
+                disabled={loading || !promql}
+              >
+                {loading ? 'Previewing…' : 'Preview'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Chart Type</label>
+              <select
+                className="w-full border rounded-xl px-3 py-2"
+                value={chartType}
+                onChange={e => setChartType(e.target.value)}
+              >
+                <option value="line">Line</option>
+                <option value="bar">Bar</option>
+                <option value="pie">Pie</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Warn ≥</label>
+              <input
+                type="number"
+                className="w-full border rounded-xl px-3 py-2"
+                value={thresholds.warning ?? ''}
+                onChange={e => setThresholds(t => ({ ...t, warning: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Critical ≥</label>
+              <input
+                type="number"
+                className="w-full border rounded-xl px-3 py-2"
+                value={thresholds.critical ?? ''}
+                onChange={e => setThresholds(t => ({ ...t, critical: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Width (grid)</label>
+              <input
+                type="number"
+                className="w-full border rounded-xl px-3 py-2"
+                value={layout.w}
+                min={2}
+                max={12}
+                onChange={e => setLayout(l => ({ ...l, w: Number(e.target.value) }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Height (rows)</label>
+              <input
+                type="number"
+                className="w-full border rounded-xl px-3 py-2"
+                value={layout.h}
+                min={2}
+                max={8}
+                onChange={e => setLayout(l => ({ ...l, h: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+
+          {preview && preview.length > 0 && (
+            <div className="mt-2">
+              <div className="text-sm font-semibold mb-1">Preview</div>
+              <div className="rounded-2xl border p-3">
+                <Chart panel={{ chartType }} data={preview} />
+              </div>
+            </div>
+          )}
+
+          <div className="pt-4 flex justify-end gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-xl bg-gray-700 text-white">Close</button>
+            {role !== 'viewer' && (
+              <button onClick={save} className="px-4 py-2 rounded-xl bg-blue-600 text-white">
+                {isEdit ? 'Save Changes' : 'Add Panel'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ----------------------------- main page ---------------------------- */
 export default function Analytics() {
   const { accessToken, user } = useContext(AuthContext);
   const role = user?.role || 'viewer';
 
-  // ADD THIS
-  const [metricsOpen, setMetricsOpen] = useState(false);
-  const [dashboardOpen, setDashboardOpen] = useState(false);
-  const [dashboardDrawerOpen, setDashboardDrawerOpen] = useState(false);
+  const [dashboards, setDashboards] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [panels, setPanels] = useState([]);
+  const [panelData, setPanelData] = useState({}); // panelId -> rows
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingPanel, setEditingPanel] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-
-  const [cluster, setCluster] = useState(null);
-  const [nodes, setNodes] = useState([]);
-  const [topPods, setTopPods] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [sources, setSources] = useState({ k8s: true, prometheus: false });
-  const [net, setNet] = useState(null);
-  const [fsio, setFsio] = useState(null);
-
-  // initial REST loads
-  useEffect(() => {
+  /* --------- load dashboards ---------- */
+  const loadDashboards = async () => {
     if (!accessToken) return;
-    const headers = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
-    (async () => {
-      try {
-        const ds = await axios.get(`${API}/analytics/data-sources`, { headers });
-        setSources(ds.data);
-      } catch {}
-      try {
-        const res = await axios.get(`${API}/analytics/cluster/nodes`, { headers });
-        setCluster(res.data.cluster); setNodes(res.data.nodes);
-        const pods = await axios.get(`${API}/analytics/cluster/pods?namespace=all`, { headers });
-        const sorted = (pods.data.items || []).sort((a,b)=>(b.cpuCores||0)-(a.cpuCores||0)).slice(0,10);
-        setTopPods(sorted);
-      } catch {}
-      try {
-        const nm = await axios.get(`${API}/analytics/network-metrics`, { headers });
-        setNet(nm.data);
-      } catch {}
-      try {
-        const fsm = await axios.get(`${API}/analytics/filesystem-metrics`, { headers });
-        setFsio(fsm.data);
-      } catch {}
-    })();
+    try {
+      const res = await axios.get(`${API}/analytics/dashboards`, {
+        headers: headersFor(accessToken, role)
+      });
+      setDashboards(res.data || []);
+    } catch (e) {
+      console.error(e);
+      if (e.response?.status === 403) alert('Forbidden: Insufficient role');
+    }
+  };
+
+  /* --------- load one dashboard (+panels) ---------- */
+  const loadDashboardPanels = async (dashboardId) => {
+    if (!dashboardId || !accessToken) return;
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API}/analytics/dashboards/${dashboardId}`, {
+        headers: headersFor(accessToken, role)
+      });
+      const p = res.data?.panels || [];
+      setPanels(p);
+      // fetch each panel query result once (initial render)
+      p.forEach(async (panel) => {
+        await fetchPanelData(panel);
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPanelData = async (panel) => {
+    if (!panel?.promql) return;
+    try {
+      const res = await axios.post(
+        `${API}/analytics/query`,
+        { query: panel.promql },
+        { headers: headersFor(accessToken, role) }
+      );
+      const rows = (res.data?.data || []).map(r => ({
+        time: r.ts ? new Date(r.ts).toLocaleTimeString() : '',
+        value: Number(r.value || r.val || 0),
+        series: r.series
+      }));
+      setPanelData(prev => ({ ...prev, [panel.id]: rows }));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  /* --------- create / delete dashboards ---------- */
+  const createDashboard = async () => {
+    const name = prompt('Dashboard name?');
+    if (!name) return;
+    try {
+      const res = await axios.post(
+        `${API}/analytics/dashboards`,
+        { name, description: '' },
+        { headers: headersFor(accessToken, role) }
+      );
+      await loadDashboards();
+      // auto-select newly created
+      setSelected(res.data);
+      await loadDashboardPanels(res.data.id);
+    } catch (e) {
+      alert(`Create failed: ${e.response?.data?.error || e.message}`);
+    }
+  };
+
+  const deleteDashboard = async (dashboard) => {
+    if (!confirm(`Delete dashboard "${dashboard.name}"?`)) return;
+    try {
+      await axios.delete(`${API}/analytics/dashboards/${dashboard.id}`, {
+        headers: headersFor(accessToken, role)
+      });
+      setSelected(null);
+      setPanels([]);
+      setPanelData({});
+      await loadDashboards();
+    } catch (e) {
+      alert(`Delete failed: ${e.response?.data?.error || e.message}`);
+    }
+  };
+
+  /* --------- initial load ---------- */
+  useEffect(() => {
+    loadDashboards();
   }, [accessToken, role]);
 
-  // SSE stream
+  /* --------- select change -> load panels ---------- */
   useEffect(() => {
-    if (!accessToken) return;
-    const es = new EventSource(`${API}/analytics/stream?token=${accessToken}&role=${role}`);
-    es.addEventListener('metrics', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (payload.cluster) setCluster(payload.cluster);
-        if (payload.nodes) setNodes(payload.nodes);
-        if (payload.topPods) setTopPods(payload.topPods);
-        setHistory(h => [...h, { ts: payload.ts, cpu: payload.cluster?.totalCpuCores || 0 }].slice(-60));
-      } catch {}
-    });
-    return () => es.close();
-  }, [accessToken, role]);
+    if (selected?.id) loadDashboardPanels(selected.id);
+  }, [selected?.id]);
 
-  const kpis = useMemo(() => ([
-    { label: 'Nodes (Ready/Total)', value: cluster ? `${cluster.readyCount}/${cluster.nodeCount}` : '--' },
-    { label: 'CPU (Total cores)', value: cluster ? round(cluster.totalCpuCores, 2) : '--' },
-    { label: 'Memory (Total GiB)', value: cluster ? round(bytesToGiB(cluster.totalMemoryBytes), 1) : '--' },
-    { label: 'Metrics', value: cluster?.metricsAvailable ? 'Available' : 'Unavailable' },
-  ]), [cluster]);
-
+  /* ----------------------------- render ----------------------------- */
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Analytics</h1>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">
-            Source: {sources.prometheus ? 'Prometheus + K8s' : 'K8s only'}
-          </span>
-          <DataSourceDrawer token={accessToken} role={role} />
-          {role === 'admin' && (
-              <button
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-                onClick={() => setMetricsOpen(true)}
-              >
-                Metrics Dashboards
-              </button>         
-          )}
-          {role === 'admin' && (
-              <button
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-              onClick={() => setDashboardOpen(true)}
-            >
-              Manage Dashboards
-            </button>
-          )}
-
-          {role === 'admin' && (
+    <div className="h-[calc(100vh-64px)] flex">
+      {/* Sidebar */}
+      <aside className="w-72 border-r bg-white/80 backdrop-blur-sm">
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-gray-500">Analytics</div>
+            <div className="text-lg font-semibold">Dashboards</div>
+          </div>
+          {role !== 'viewer' && (
             <button
-              onClick={() => setDashboardDrawerOpen(true)}
+              onClick={createDashboard}
               className="px-3 py-2 rounded-xl border shadow bg-white"
+              title="Create new dashboard"
             >
-              📊 Create Dashboard
+              + New
             </button>
-          )}           
+          )}
         </div>
-      </div>
-
-  
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {kpis.map(k => (
-          <div key={k.label} className="rounded-2xl shadow p-4 bg-white">
-            <div className="text-sm text-gray-500">{k.label}</div>
-            <div className="text-2xl font-bold mt-1">{k.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Cluster CPU timeseries */}
-      <div className="rounded-2xl shadow p-4 bg-white">
-        <div className="font-semibold mb-2">Cluster CPU (cores) over time</div>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={history.map(p=>({ name:new Date(p.ts).toLocaleTimeString(), cpu:p.cpu }))}>
-            <Line type="monotone" dataKey="cpu" />
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Nodes bar */}
-      <div className="rounded-2xl shadow p-4 bg-white">
-        <div className="font-semibold mb-2">Node CPU (cores)</div>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={nodes.map(n=>({ name:n.name, cpu:n.cpuCores||0 }))}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" hide={nodes.length > 8} />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="cpu" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Top Pods */}
-      <div className="rounded-2xl shadow p-4 bg-white">
-        <div className="font-semibold mb-3">Top Pods by CPU</div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="py-2 pr-4">Namespace</th>
-                <th className="py-2 pr-4">Pod</th>
-                <th className="py-2 pr-4">CPU (cores)</th>
-                <th className="py-2 pr-4">Memory (MiB)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topPods.map((p) => (
-                <tr key={`${p.namespace}/${p.name}`} className="border-b last:border-0">
-                  <td className="py-2 pr-4">{p.namespace}</td>
-                  <td className="py-2 pr-4">{p.name}</td>
-                  <td className="py-2 pr-4">{round(p.cpuCores, 3)}</td>
-                  <td className="py-2 pr-4">{round((p.memoryBytes || 0) / (1024*1024), 1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="px-2 pb-3 space-y-1 overflow-y-auto h-[calc(100%-72px)]">
+          {dashboards.length === 0 && (
+            <div className="text-xs text-gray-500 px-2">No dashboards yet.</div>
+          )}
+          {dashboards.map(d => {
+            const active = selected?.id === d.id;
+            return (
+              <button
+                key={d.id}
+                onClick={() => setSelected(d)}
+                className={`w-full text-left px-3 py-2 rounded-xl hover:bg-indigo-50 transition ${
+                  active ? 'bg-indigo-100 font-medium' : ''
+                }`}
+              >
+                <div className="truncate">{d.name}</div>
+                {d.description && <div className="text-xs text-gray-500 truncate">{d.description}</div>}
+              </button>
+            );
+          })}
         </div>
-      </div>
+      </aside>
 
-      {/* Network panel */}
-      <div className="rounded-2xl shadow p-4 bg-white">
-        <div className="font-semibold mb-2">Network</div>
-        {!net && <div className="text-sm text-gray-500">Loading network metrics...</div>}
-        {net && net.source === 'prometheus' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-xl border p-3">
-              <div className="text-sm text-gray-500">RX (bytes/s)</div>
-              <div className="text-xl font-bold">{round(net.throughput?.rxBytesPerSec || 0, 0)}</div>
-            </div>
-            <div className="rounded-xl border p-3">
-              <div className="text-sm text-gray-500">TX (bytes/s)</div>
-              <div className="text-xl font-bold">{round(net.throughput?.txBytesPerSec || 0, 0)}</div>
-            </div>
-            <div className="rounded-xl border p-3">
-              <div className="text-sm text-gray-500">Latency p95 (s)</div>
-              <div className="text-xl font-bold">{round(net.latencyP95 || 0, 3)}</div>
+      {/* Main */}
+      <main className="flex-1 p-6 overflow-y-auto space-y-4">
+        {!selected && (
+          <div className="h-full grid place-items-center">
+            <div className="text-center">
+              <div className="text-2xl font-semibold mb-2">Select a dashboard</div>
+              <div className="text-gray-500">
+                Choose a dashboard from the left, or create a new one.
+              </div>
             </div>
           </div>
         )}
-        {net && net.source === 'k8s' && (
-          <div className="text-sm text-gray-600">
-            Prometheus not configured. Showing topology objects (Services/NetworkPolicies). Add Prometheus URL via the Datasource drawer for throughput/latency.
-          </div>
-        )}
-      </div>
 
-      {/* Filesystem IO */}
-      <div className="rounded-2xl shadow p-4 bg-white">
-        <div className="font-semibold mb-2">Filesystem I/O</div>
-        {!fsio && <div className="text-sm text-gray-500">Loading filesystem metrics...</div>}
-        {fsio && fsio.source === 'prometheus' && (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={[{ name:'IOPS', read: fsio.filesystemIO.readBps||0, write: fsio.filesystemIO.writeBps||0 }]}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="read" />
-              <Bar dataKey="write" />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-        {fsio && fsio.source === 'k8s' && (
-          <div className="text-sm text-gray-600">
-            Filesystem I/O not available without Prometheus.
-          </div>
-        )}
-      </div>
+        {selected && (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-gray-500">Dashboard</div>
+                <div className="text-2xl font-semibold">{selected.name}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                {role !== 'viewer' && (
+                  <>
+                    <button
+                      className="px-3 py-2 rounded-xl border shadow bg-white"
+                      onClick={() => {
+                        setEditingPanel(null);
+                        setDrawerOpen(true);
+                      }}
+                    >
+                      + Add Panel
+                    </button>
+                    <button
+                      className="px-3 py-2 rounded-xl border shadow bg-white text-red-600"
+                      onClick={() => deleteDashboard(selected)}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+                <span className="text-xs text-gray-500">Role: <span className="font-mono">{role}</span></span>
+              </div>
+            </div>
 
-      <div className="text-xs text-gray-500">Role: <span className="font-mono">{role}</span></div>
+            {/* Panels grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {loading && (
+                <div className="col-span-full text-sm text-gray-500">Loading panels…</div>
+              )}
+              {panels.map(p => {
+                const rows = panelData[p.id] || [];
+                const lastVal = rows.length ? rows[rows.length - 1].value : 0;
+                const ring = panelThresholdClass(p.thresholds, lastVal);
+                const spanCols = Math.min(3, Math.max(1, Math.round((p.layout?.w || 6) / 4)));
+                return (
+                  <div
+                    key={p.id}
+                    className={`rounded-2xl shadow p-4 bg-white transition ${ring}`}
+                    style={{ gridColumn: `span ${spanCols} / span ${spanCols}` }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-semibold truncate">{p.title}</div>
+                      {role !== 'viewer' && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="text-sm text-indigo-600"
+                            onClick={() => {
+                              setEditingPanel(p);
+                              setDrawerOpen(true);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="text-sm text-red-600"
+                            onClick={async () => {
+                              if (!confirm(`Delete panel "${p.title}"?`)) return;
+                              try {
+                                await axios.delete(
+                                  `${API}/analytics/dashboards/${selected.id}/panels/${p.id}`,
+                                  { headers: headersFor(accessToken, role) }
+                                );
+                                setPanels(ps => ps.filter(x => x.id !== p.id));
+                                setPanelData(pd => {
+                                  const { [p.id]: _, ...rest } = pd;
+                                  return rest;
+                                });
+                              } catch (e) {
+                                alert(`Delete failed: ${e.response?.data?.error || e.message}`);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <Chart panel={p} data={rows} />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </main>
 
-      {/* --- Add the Drawer here ---
-      <MetricsDashboardDrawer
+      {/* Drawer for Add/Edit panel */}
+      <PanelEditorDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         token={accessToken}
         role={role}
-        open={dashboardDrawerOpen}
-        onClose={() => setDashboardDrawerOpen(false)}
-      /> */}
-      <MetricsDashboardDrawer
-        open={dashboardDrawerOpen}
-        onClose={() => setDashboardDrawerOpen(false)}
+        dashboardId={selected?.id}
+        panel={editingPanel}
+        onSaved={() => {
+          if (selected?.id) loadDashboardPanels(selected.id);
+        }}
       />
-
-      {metricsOpen && <MetricsDashboardDrawer open={metricsOpen} onClose={() => setMetricsOpen(false)} />}
-      {dashboardOpen && <DashboardDrawer open={dashboardOpen} onClose={() => setDashboardOpen(false)} />}
     </div>
   );
 }
