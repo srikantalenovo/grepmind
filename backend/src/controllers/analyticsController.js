@@ -332,56 +332,56 @@ export const streamAnalytics = async (req, res) => {
 
 /* -------------------- DASHBOARDS -------------------- */
 
-// GET all dashboards with panels
-export const getDashboards = async (req, res) => {
-  try {
-    const dashboards = await prisma.dashboard.findMany({
-      include: { panels: true },
-    });
-    res.json(dashboards);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch dashboards", details: err.message });
-  }
-};
+// // GET all dashboards with panels
+// export const getDashboards = async (req, res) => {
+//   try {
+//     const dashboards = await prisma.dashboard.findMany({
+//       include: { panels: true },
+//     });
+//     res.json(dashboards);
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to fetch dashboards", details: err.message });
+//   }
+// };
 
 // CREATE dashboard
-export const createDashboard = async (req, res) => {
-  try {
-    const { name, description } = req.body;
-    const dashboard = await prisma.dashboard.create({
-      data: { name, description },
-    });
-    res.json(dashboard);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to create dashboard", details: err.message });
-  }
-};
+// export const createDashboard = async (req, res) => {
+//   try {
+//     const { name, description } = req.body;
+//     const dashboard = await prisma.dashboard.create({
+//       data: { name, description },
+//     });
+//     res.json(dashboard);
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to create dashboard", details: err.message });
+//   }
+// };
 
-// UPDATE dashboard
-export const updateDashboard = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description } = req.body;
-    const updated = await prisma.dashboard.update({
-      where: { id: parseInt(id) },
-      data: { name, description },
-    });
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to update dashboard", details: err.message });
-  }
-};
+// // UPDATE dashboard
+// export const updateDashboard = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { name, description } = req.body;
+//     const updated = await prisma.dashboard.update({
+//       where: { id: parseInt(id) },
+//       data: { name, description },
+//     });
+//     res.json(updated);
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to update dashboard", details: err.message });
+//   }
+// };
 
 // DELETE dashboard
-export const deleteDashboard = async (req, res) => {
-  try {
-    const { id } = req.params;
-    await prisma.dashboard.delete({ where: { id: parseInt(id) } });
-    res.json({ message: "Dashboard deleted" });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to delete dashboard", details: err.message });
-  }
-};
+// export const deleteDashboard = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     await prisma.dashboard.delete({ where: { id: parseInt(id) } });
+//     res.json({ message: "Dashboard deleted" });
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to delete dashboard", details: err.message });
+//   }
+// };
 
 /* -------------------- PANELS -------------------- */
 
@@ -421,32 +421,32 @@ export const createPanel = async (req, res) => {
 };
 
 // UPDATE panel
-export const updatePanel = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { title, promql, chartType, thresholds } = req.body;
+// export const updatePanel = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { title, promql, chartType, thresholds } = req.body;
 
-    const updated = await prisma.panel.update({
-      where: { id: parseInt(id) },
-      data: { title, promql, chartType, thresholds },
-    });
+//     const updated = await prisma.panel.update({
+//       where: { id: parseInt(id) },
+//       data: { title, promql, chartType, thresholds },
+//     });
 
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to update panel", details: err.message });
-  }
-};
+//     res.json(updated);
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to update panel", details: err.message });
+//   }
+// };
 
 // DELETE panel
-export const deletePanel = async (req, res) => {
-  try {
-    const { id } = req.params;
-    await prisma.panel.delete({ where: { id: parseInt(id) } });
-    res.json({ message: "Panel deleted" });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to delete panel", details: err.message });
-  }
-};
+// export const deletePanel = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     await prisma.panel.delete({ where: { id: parseInt(id) } });
+//     res.json({ message: "Panel deleted" });
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to delete panel", details: err.message });
+//   }
+// };
 
 
 //-----------------------------------------------------------------------------------------
