@@ -2,559 +2,233 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import {
-  LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell
-} from 'recharts';
+import { API, authHeaders } from './metricsHelpers';
+import PanelEditor from '../components/PanelEditor';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
-const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
-
-/* ----------------------------- helpers ------------------------------ */
-const headersFor = (token, role) => ({
-  Authorization: `Bearer ${token}`,
-  'x-user-role': role
-});
-
-const Chart = ({ panel, data }) => {
-  if (!data || data.length === 0) return <div className="text-xs text-gray-500">No data</div>;
-
-  const viz = panel.visualizationConfig || {};
-  const chartType = (panel.chartType || 'line').toLowerCase();
-
-  if (chartType === 'bar') {
-    return (
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="time" hide={data.length > 30} />
-          <YAxis />
-          <Tooltip />
-          <Bar dataKey="value" />
-        </BarChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  if (chartType === 'pie') {
-    // Aggregate for a quick pie (take last points of multiple series if present)
-    const grouped = Object.values(data.reduce((acc, d) => {
-      const k = d.series || panel.title || 'series';
-      acc[k] = { name: k, value: (acc[k]?.value || 0) + (d.value || 0) };
-      return acc;
-    }, {}));
-    return (
-      <ResponsiveContainer width="100%" height={220}>
-        <PieChart>
-          <Pie dataKey="value" data={grouped} outerRadius={80} label />
-          {grouped.map((_, i) => <Cell key={i} />)}
-          <Tooltip />
-        </PieChart>
-      </ResponsiveContainer>
-    );
-  }
-
-  // default line
-  return (
-    <ResponsiveContainer width="100%" height={220}>
-      <LineChart data={data}>
-        <Line type="monotone" dataKey="value" strokeWidth={2} dot={false} />
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" hide={data.length > 30} />
-        <YAxis />
-        <Tooltip />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-};
-
-const panelThresholdClass = (thresholds, v) => {
-  if (!thresholds) return '';
-  const warn = Number.isFinite(thresholds.warning) ? thresholds.warning : undefined;
-  const crit = Number.isFinite(thresholds.critical) ? thresholds.critical : undefined;
-  if (crit != null && v >= crit) return 'ring-2 ring-red-500';
-  if (warn != null && v >= warn) return 'ring-2 ring-amber-400';
-  return '';
-};
-
-/* ----------------------- Panel Editor Drawer ------------------------ */
-const PanelEditorDrawer = ({
-  open, onClose, token, role, dashboardId, panel, onSaved
-}) => {
-  const isEdit = !!panel?.id;
-  const [title, setTitle] = useState(panel?.title || '');
-  const [promql, setPromql] = useState(panel?.promql || '');
-  const [chartType, setChartType] = useState(panel?.chartType || 'line');
-  const [thresholds, setThresholds] = useState(panel?.thresholds || { warning: '', critical: '' });
-  const [visualizationConfig, setVisualizationConfig] = useState(panel?.visualizationConfig || {});
-  const [layout, setLayout] = useState(panel?.layout || { w: 6, h: 3 });
-  const [preview, setPreview] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setTitle(panel?.title || '');
-    setPromql(panel?.promql || '');
-    setChartType(panel?.chartType || 'line');
-    setThresholds(panel?.thresholds || { warning: '', critical: '' });
-    setVisualizationConfig(panel?.visualizationConfig || {});
-    setLayout(panel?.layout || { w: 6, h: 3 });
-    setPreview([]);
-  }, [open, panel]);
-
-  const doPreview = async () => {
-    if (!promql?.trim()) return;
-    setLoading(true);
-    try {
-      const res = await axios.post(
-        `${API}/analytics/query`,
-        { query: promql },
-        { headers: headersFor(token, role) }
-      );
-      // Expecting backend returns array of { ts, value, series? }
-      const rows = (res.data?.data || []).map(r => ({
-        time: r.ts ? new Date(r.ts).toLocaleTimeString() : '',
-        value: Number(r.value || r.val || 0),
-        series: r.series
-      }));
-      setPreview(rows);
-    } catch (e) {
-      alert(`Preview failed: ${e.response?.data?.error || e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const save = async () => {
-    if (!title.trim() || !promql.trim()) {
-      alert('Title and PromQL are required');
-      return;
-    }
-    const payload = {
-      title,
-      promql,
-      chartType,
-      thresholds: {
-        warning: thresholds.warning === '' ? null : Number(thresholds.warning),
-        critical: thresholds.critical === '' ? null : Number(thresholds.critical)
-      },
-      visualizationConfig,
-      layout
-    };
-    try {
-      if (isEdit) {
-        await axios.put(
-          `${API}/analytics/dashboards/${dashboardId}/panels/${panel.id}`,
-          payload,
-          { headers: headersFor(token, role) }
-        );
-      } else {
-        await axios.post(
-          `${API}/analytics/dashboards/${dashboardId}/panels`,
-          payload,
-          { headers: headersFor(token, role) }
-        );
-      }
-      onSaved?.();
-      onClose?.();
-    } catch (e) {
-      alert(`Save failed: ${e.response?.data?.error || e.message}`);
-    }
-  };
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full sm:w-[36rem] bg-white shadow-xl overflow-y-auto">
-        <div className="px-4 py-3 bg-indigo-700 text-white">
-          <div className="text-sm">{isEdit ? 'Edit Panel' : 'Add Panel'}</div>
-          <div className="text-lg font-semibold truncate">Dashboard Panel Editor</div>
-        </div>
-
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Title</label>
-            <input
-              className="w-full border rounded-xl px-3 py-2"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="HTTP Requests Rate"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">PromQL</label>
-            <textarea
-              className="w-full border rounded-xl px-3 py-2 min-h-[96px]"
-              value={promql}
-              onChange={e => setPromql(e.target.value)}
-              placeholder="rate(http_requests_total[5m])"
-            />
-            <div className="mt-2">
-              <button
-                onClick={doPreview}
-                className="px-3 py-2 rounded-xl border shadow bg-white disabled:opacity-50"
-                disabled={loading || !promql}
-              >
-                {loading ? 'Previewing…' : 'Preview'}
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Chart Type</label>
-              <select
-                className="w-full border rounded-xl px-3 py-2"
-                value={chartType}
-                onChange={e => setChartType(e.target.value)}
-              >
-                <option value="line">Line</option>
-                <option value="bar">Bar</option>
-                <option value="pie">Pie</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Warn ≥</label>
-              <input
-                type="number"
-                className="w-full border rounded-xl px-3 py-2"
-                value={thresholds.warning ?? ''}
-                onChange={e => setThresholds(t => ({ ...t, warning: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Critical ≥</label>
-              <input
-                type="number"
-                className="w-full border rounded-xl px-3 py-2"
-                value={thresholds.critical ?? ''}
-                onChange={e => setThresholds(t => ({ ...t, critical: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Width (grid)</label>
-              <input
-                type="number"
-                className="w-full border rounded-xl px-3 py-2"
-                value={layout.w}
-                min={2}
-                max={12}
-                onChange={e => setLayout(l => ({ ...l, w: Number(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Height (rows)</label>
-              <input
-                type="number"
-                className="w-full border rounded-xl px-3 py-2"
-                value={layout.h}
-                min={2}
-                max={8}
-                onChange={e => setLayout(l => ({ ...l, h: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
-
-          {preview && preview.length > 0 && (
-            <div className="mt-2">
-              <div className="text-sm font-semibold mb-1">Preview</div>
-              <div className="rounded-2xl border p-3">
-                <Chart panel={{ chartType }} data={preview} />
-              </div>
-            </div>
-          )}
-
-          <div className="pt-4 flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-xl bg-gray-700 text-white">Close</button>
-            {role !== 'viewer' && (
-              <button onClick={save} className="px-4 py-2 rounded-xl bg-blue-600 text-white">
-                {isEdit ? 'Save Changes' : 'Add Panel'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* ----------------------------- main page ---------------------------- */
 export default function Analytics() {
   const { accessToken, user } = useContext(AuthContext);
   const role = user?.role || 'viewer';
 
   const [dashboards, setDashboards] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [activeDash, setActiveDash] = useState(null);
   const [panels, setPanels] = useState([]);
-  const [panelData, setPanelData] = useState({}); // panelId -> rows
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editingPanel, setEditingPanel] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorPanel, setEditorPanel] = useState(null);
 
-  /* --------- load dashboards ---------- */
-  const loadDashboards = async () => {
+  const canEdit = role === 'admin' || role === 'editor';
+
+  const loadDashboards = async (selectFirstIfEmpty = true) => {
     if (!accessToken) return;
     try {
-      const res = await axios.get(`${API}/analytics/dashboards`, {
-        headers: headersFor(accessToken, role)
-      });
+      const res = await axios.get(`${API}/analytics/dashboards`, { headers: authHeaders(accessToken, role) });
       setDashboards(res.data || []);
+      if (selectFirstIfEmpty && res.data?.length && !activeDash) {
+        setActiveDash(res.data[0]);
+      }
     } catch (e) {
       console.error(e);
-      if (e.response?.status === 403) alert('Forbidden: Insufficient role');
     }
   };
 
-  /* --------- load one dashboard (+panels) ---------- */
-  const loadDashboardPanels = async (dashboardId) => {
-    if (!dashboardId || !accessToken) return;
+  const loadPanels = async (dash) => {
+    if (!dash || !accessToken) return;
     setLoading(true);
     try {
-      const res = await axios.get(`${API}/analytics/dashboards/${dashboardId}`, {
-        headers: headersFor(accessToken, role)
-      });
-      const p = res.data?.panels || [];
-      setPanels(p);
-      // fetch each panel query result once (initial render)
-      p.forEach(async (panel) => {
-        await fetchPanelData(panel);
-      });
+      const res = await axios.get(`${API}/analytics/dashboards/${dash.id}/panels`, { headers: authHeaders(accessToken, role) });
+      setPanels(res.data || []);
     } catch (e) {
       console.error(e);
+      setPanels([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchPanelData = async (panel) => {
-    if (!panel?.promql) return;
-    try {
-      const res = await axios.post(
-        `${API}/analytics/query`,
-        { query: panel.promql },
-        { headers: headersFor(accessToken, role) }
-      );
-      const rows = (res.data?.data || []).map(r => ({
-        time: r.ts ? new Date(r.ts).toLocaleTimeString() : '',
-        value: Number(r.value || r.val || 0),
-        series: r.series
-      }));
-      setPanelData(prev => ({ ...prev, [panel.id]: rows }));
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  useEffect(() => { loadDashboards(); }, [accessToken, role]);
+  useEffect(() => { if (activeDash?.id) loadPanels(activeDash); }, [activeDash?.id]);
 
-  /* --------- create / delete dashboards ---------- */
   const createDashboard = async () => {
     const name = prompt('Dashboard name?');
     if (!name) return;
     try {
-      const res = await axios.post(
-        `${API}/analytics/dashboards`,
-        { name, description: '' },
-        { headers: headersFor(accessToken, role) }
-      );
-      await loadDashboards();
-      // auto-select newly created
-      setSelected(res.data);
-      await loadDashboardPanels(res.data.id);
+      await axios.post(`${API}/analytics/dashboards`, { name }, { headers: authHeaders(accessToken, role) });
+      await loadDashboards(false);
     } catch (e) {
-      alert(`Create failed: ${e.response?.data?.error || e.message}`);
+      alert(e.response?.data?.message || e.response?.data?.error || e.message);
     }
   };
 
-  const deleteDashboard = async (dashboard) => {
-    if (!confirm(`Delete dashboard "${dashboard.name}"?`)) return;
+  const deleteDashboard = async (dash) => {
+    if (!dash) return;
+    if (!confirm(`Delete dashboard "${dash.name}"?`)) return;
     try {
-      await axios.delete(`${API}/analytics/dashboards/${dashboard.id}`, {
-        headers: headersFor(accessToken, role)
-      });
-      setSelected(null);
-      setPanels([]);
-      setPanelData({});
+      await axios.delete(`${API}/analytics/dashboards/${dash.id}`, { headers: authHeaders(accessToken, role) });
+      setActiveDash(null);
       await loadDashboards();
+      setPanels([]);
     } catch (e) {
-      alert(`Delete failed: ${e.response?.data?.error || e.message}`);
+      alert(e.response?.data?.message || e.response?.data?.error || e.message);
     }
   };
 
-  /* --------- initial load ---------- */
-  useEffect(() => {
-    loadDashboards();
-  }, [accessToken, role]);
+  const deletePanel = async (p) => {
+    if (!confirm(`Delete panel "${p.title}"?`)) return;
+    try {
+      await axios.delete(`${API}/analytics/panels/${p.id}`, { headers: authHeaders(accessToken, role) });
+      await loadPanels(activeDash);
+    } catch (e) {
+      alert(e.response?.data?.message || e.response?.data?.error || e.message);
+    }
+  };
 
-  /* --------- select change -> load panels ---------- */
-  useEffect(() => {
-    if (selected?.id) loadDashboardPanels(selected.id);
-  }, [selected?.id]);
+  const PanelPreview = ({ panel }) => {
+    const [data, setData] = useState([]);
+    const [series, setSeries] = useState([]);
 
-  /* ----------------------------- render ----------------------------- */
+    useEffect(() => {
+      let mounted = true;
+      (async () => {
+        try {
+          const res = await axios.post(`${API}/analytics/query`, { query: panel.promql }, { headers: authHeaders(accessToken, role) });
+          const matrix = res.data?.data?.result || [];
+          const { data, series } = (await import('./metricsHelpers')).toRechartsSeries(matrix);
+          if (mounted) { setData(data); setSeries(series); }
+        } catch (e) {
+          if (mounted) { setData([]); setSeries([]); }
+        }
+      })();
+      return () => { mounted = false; };
+    }, [panel?.promql]);
+
+    return (
+      <div className="rounded-2xl bg-white shadow p-3 border border-gray-100">
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-medium">{panel.title}</div>
+          {canEdit && (
+            <div className="flex gap-2">
+              <button
+                className="text-indigo-600 hover:underline"
+                onClick={() => { setEditorPanel(panel); setShowEditor(true); }}
+              >
+                Edit
+              </button>
+              <button className="text-red-600 hover:underline" onClick={() => deletePanel(panel)}>
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="h-48">
+          {data.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" />
+                <YAxis />
+                <Tooltip />
+                {series.map(s => <Line key={s} type="monotone" dataKey={s} strokeWidth={2} dot={false} />)}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 text-sm">
+              No data
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="h-[calc(100vh-64px)] flex">
+    <div className="h-full grid grid-cols-[280px_1fr]">
       {/* Sidebar */}
-      <aside className="w-72 border-r bg-white/80 backdrop-blur-sm">
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <div className="text-xs text-gray-500">Analytics</div>
-            <div className="text-lg font-semibold">Dashboards</div>
-          </div>
-          {role !== 'viewer' && (
+      <aside className="border-r border-gray-200 bg-white">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="font-semibold">Dashboards</div>
+          {canEdit && (
             <button
               onClick={createDashboard}
-              className="px-3 py-2 rounded-xl border shadow bg-white"
-              title="Create new dashboard"
+              className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-500 transition"
             >
               + New
             </button>
           )}
         </div>
-        <div className="px-2 pb-3 space-y-1 overflow-y-auto h-[calc(100%-72px)]">
-          {dashboards.length === 0 && (
-            <div className="text-xs text-gray-500 px-2">No dashboards yet.</div>
-          )}
-          {dashboards.map(d => {
-            const active = selected?.id === d.id;
-            return (
-              <button
-                key={d.id}
-                onClick={() => setSelected(d)}
-                className={`w-full text-left px-3 py-2 rounded-xl hover:bg-indigo-50 transition ${
-                  active ? 'bg-indigo-100 font-medium' : ''
-                }`}
-              >
-                <div className="truncate">{d.name}</div>
-                {d.description && <div className="text-xs text-gray-500 truncate">{d.description}</div>}
-              </button>
-            );
-          })}
-        </div>
-      </aside>
 
-      {/* Main */}
-      <main className="flex-1 p-6 overflow-y-auto space-y-4">
-        {!selected && (
-          <div className="h-full grid place-items-center">
-            <div className="text-center">
-              <div className="text-2xl font-semibold mb-2">Select a dashboard</div>
-              <div className="text-gray-500">
-                Choose a dashboard from the left, or create a new one.
-              </div>
-            </div>
+        <div className="p-2 space-y-1 overflow-y-auto h-[calc(100vh-56px)]">
+          {(dashboards || []).map(d => (
+            <button
+              key={d.id}
+              onClick={() => setActiveDash(d)}
+              className={`w-full text-left px-3 py-2 rounded-xl transition ${
+                activeDash?.id === d.id
+                  ? 'bg-indigo-50 text-indigo-700'
+                  : 'hover:bg-gray-50 text-gray-700'
+              }`}
+            >
+              <div className="font-medium truncate">{d.name}</div>
+              <div className="text-xs text-gray-400">id: {d.id}</div>
+            </button>
+          ))}
+        </div>
+
+        {activeDash && canEdit && (
+          <div className="p-3 border-t border-gray-100">
+            <button
+              onClick={() => deleteDashboard(activeDash)}
+              className="w-full px-3 py-2 rounded-xl border text-red-600 border-red-200 hover:bg-red-50 transition"
+            >
+              Delete dashboard
+            </button>
           </div>
         )}
+      </aside>
 
-        {selected && (
-          <>
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs text-gray-500">Dashboard</div>
-                <div className="text-2xl font-semibold">{selected.name}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                {role !== 'viewer' && (
-                  <>
-                    <button
-                      className="px-3 py-2 rounded-xl border shadow bg-white"
-                      onClick={() => {
-                        setEditingPanel(null);
-                        setDrawerOpen(true);
-                      }}
-                    >
-                      + Add Panel
-                    </button>
-                    <button
-                      className="px-3 py-2 rounded-xl border shadow bg-white text-red-600"
-                      onClick={() => deleteDashboard(selected)}
-                    >
-                      Delete
-                    </button>
-                  </>
-                )}
-                <span className="text-xs text-gray-500">Role: <span className="font-mono">{role}</span></span>
-              </div>
-            </div>
+      {/* Main content */}
+      <main className="p-6 bg-gray-50 overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-sm text-gray-500">Analytics</div>
+            <h1 className="text-2xl font-semibold">{activeDash?.name || 'Select a dashboard'}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Role: <span className="font-mono">{role}</span></span>
+            {activeDash && canEdit && (
+              <button
+                onClick={() => { setEditorPanel(null); setShowEditor(true); }}
+                className="px-3 py-2 rounded-xl border shadow bg-white hover:bg-gray-50 transition"
+              >
+                ➕ New Panel
+              </button>
+            )}
+          </div>
+        </div>
 
-            {/* Panels grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {loading && (
-                <div className="col-span-full text-sm text-gray-500">Loading panels…</div>
-              )}
-              {panels.map(p => {
-                const rows = panelData[p.id] || [];
-                const lastVal = rows.length ? rows[rows.length - 1].value : 0;
-                const ring = panelThresholdClass(p.thresholds, lastVal);
-                const spanCols = Math.min(3, Math.max(1, Math.round((p.layout?.w || 6) / 4)));
-                return (
-                  <div
-                    key={p.id}
-                    className={`rounded-2xl shadow p-4 bg-white transition ${ring}`}
-                    style={{ gridColumn: `span ${spanCols} / span ${spanCols}` }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-semibold truncate">{p.title}</div>
-                      {role !== 'viewer' && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            className="text-sm text-indigo-600"
-                            onClick={() => {
-                              setEditingPanel(p);
-                              setDrawerOpen(true);
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="text-sm text-red-600"
-                            onClick={async () => {
-                              if (!confirm(`Delete panel "${p.title}"?`)) return;
-                              try {
-                                await axios.delete(
-                                  `${API}/analytics/dashboards/${selected.id}/panels/${p.id}`,
-                                  { headers: headersFor(accessToken, role) }
-                                );
-                                setPanels(ps => ps.filter(x => x.id !== p.id));
-                                setPanelData(pd => {
-                                  const { [p.id]: _, ...rest } = pd;
-                                  return rest;
-                                });
-                              } catch (e) {
-                                alert(`Delete failed: ${e.response?.data?.error || e.message}`);
-                              }
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <Chart panel={p} data={rows} />
-                  </div>
-                );
-              })}
-            </div>
-          </>
+        {!activeDash ? (
+          <div className="text-gray-500">Choose or create a dashboard from the left.</div>
+        ) : loading ? (
+          <div className="text-gray-500 animate-pulse">Loading panels…</div>
+        ) : panels.length === 0 ? (
+          <div className="text-gray-500">No panels yet. Click “New Panel”.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {panels.map(p => <PanelPreview key={p.id} panel={p} />)}
+          </div>
         )}
       </main>
 
-      {/* Drawer for Add/Edit panel */}
-      <PanelEditorDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        token={accessToken}
-        role={role}
-        dashboardId={selected?.id}
-        panel={editingPanel}
-        onSaved={() => {
-          if (selected?.id) loadDashboardPanels(selected.id);
-        }}
-      />
+      {showEditor && activeDash && (
+        <PanelEditor
+          token={accessToken}
+          role={role}
+          dashboard={activeDash}
+          panel={editorPanel}
+          onClose={() => setShowEditor(false)}
+          onSaved={() => loadPanels(activeDash)}
+        />
+      )}
     </div>
   );
 }
