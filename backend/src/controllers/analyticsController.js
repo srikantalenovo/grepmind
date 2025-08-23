@@ -1,8 +1,9 @@
 // PATCH: Prometheus-enhanced endpoints additions
 import { coreV1Api, appsV1Api, customObjectsApi, networkingV1Api } from '../config/k8sClient.js';
 import jwt from 'jsonwebtoken';
-import { promQuery, getPrometheusUrl } from '../utils/prometheusClient.js';
+//import { promQuery, getPrometheusUrl } from '../utils/prometheusClient.js';
 import  prisma  from '../../src/prismaClient.js';
+import { promQueryInstant } from '../utils/prometheusClient.js';
 
 /** Return which data sources are active */
 export const getAnalyticsDataSources = async (_req, res) => {
@@ -446,3 +447,137 @@ export const deletePanel = async (req, res) => {
     res.status(500).json({ error: "Failed to delete panel", details: err.message });
   }
 };
+
+
+//-----------------------------------------------------------------------------------------
+
+/** ====== Data Sources (Prometheus) ====== */
+export async function listDataSources(req, res) {
+  try {
+    const items = await prisma.dataSource.findMany();
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to list datasources', details: e.message });
+  }
+}
+
+export async function upsertPrometheus(req, res) {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'Missing url' });
+    const ds = await prisma.dataSource.upsert({
+      where: { type: 'prometheus' },
+      update: { url },
+      create: { type: 'prometheus', url }
+    });
+    res.json(ds);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save datasource', details: e.message });
+  }
+}
+
+/** ====== PromQL Validation / Ad hoc query ====== */
+export async function queryPromQL(req, res) {
+  try {
+    const { query } = req.body;
+    if (!query) return res.status(400).json({ error: 'Missing query' });
+    const data = await promQueryInstant(query); // {resultType, result}
+    res.json({ status: 'success', data });
+  } catch (e) {
+    res.status(500).json({ error: 'PromQL query failed', details: e.message });
+  }
+}
+
+/** ====== Dashboards ====== */
+export async function getDashboards(req, res) {
+  try {
+    const dashboards = await prisma.dashboard.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: { panels: true }
+    });
+    res.json(dashboards);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch dashboards', details: e.message });
+  }
+}
+
+export async function createDashboard(req, res) {
+  try {
+    const { name, description } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const d = await prisma.dashboard.create({ data: { name, description } });
+    res.json(d);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to create dashboard', details: e.message });
+  }
+}
+
+export async function updateDashboard(req, res) {
+  try {
+    const id = Number(req.params.id);
+    const { name, description } = req.body;
+    const d = await prisma.dashboard.update({
+      where: { id },
+      data: { name, description }
+    });
+    res.json(d);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update dashboard', details: e.message });
+  }
+}
+
+export async function deleteDashboard(req, res) {
+  try {
+    const id = Number(req.params.id);
+    await prisma.dashboard.delete({ where: { id } });
+    res.json({ message: 'Dashboard deleted' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete dashboard', details: e.message });
+  }
+}
+
+/** ====== Panels ====== */
+export async function addPanel(req, res) {
+  try {
+    const dashboardId = Number(req.params.id);
+    const {
+      title, promql, chartType,
+      thresholds = {}, layout = {}, visualizationConfig = {}
+    } = req.body;
+
+    if (!title || !promql || !chartType) {
+      return res.status(400).json({ error: 'title, promql, chartType are required' });
+    }
+
+    const p = await prisma.panel.create({
+      data: { title, promql, chartType, thresholds, layout, visualizationConfig, dashboardId }
+    });
+    res.json(p);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to add panel', details: e.message });
+  }
+}
+
+export async function updatePanel(req, res) {
+  try {
+    const id = Number(req.params.id);
+    const data = {};
+    ['title','promql','chartType','thresholds','layout','visualizationConfig','dashboardId']
+      .forEach(k => { if (k in req.body) data[k] = req.body[k]; });
+
+    const p = await prisma.panel.update({ where: { id }, data });
+    res.json(p);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update panel', details: e.message });
+  }
+}
+
+export async function deletePanel(req, res) {
+  try {
+    const id = Number(req.params.id);
+    await prisma.panel.delete({ where: { id } });
+    res.json({ message: 'Panel deleted' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete panel', details: e.message });
+  }
+}

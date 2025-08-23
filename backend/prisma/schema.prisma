@@ -59,11 +59,13 @@ model Dashboard {
 }
 
 model Panel {
-  id          Int      @id @default(autoincrement())
-  title       String
-  promql      String
-  chartType   String
-  thresholds  Json
-  dashboardId Int
-  dashboard   Dashboard @relation(fields: [dashboardId], references: [id])
+  id                   Int       @id @default(autoincrement())
+  title                String
+  promql               String
+  chartType            String
+  thresholds           Json
+  layout               Json      // e.g. {x,y,w,h} for grid placement
+  visualizationConfig  Json      // e.g. {legend, yAxis, unit, colorMode}
+  dashboardId          Int
+  dashboard            Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
 }

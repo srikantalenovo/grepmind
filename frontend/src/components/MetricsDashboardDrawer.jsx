@@ -1,110 +1,122 @@
-import React, { useState, useEffect, useContext } from 'react';
+// src/components/MetricsDashboardDrawer.jsx
+import React, { useContext, useEffect, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import PanelForm from './PanelForm';
-import PromQLExplorer from './PromQLExplorer';
+import PanelForm from './PanelForm.jsx';
+import PromQLExplorer from './PromQLExplorer.jsx';
 
 const API = import.meta.env.VITE_API_URL || 'http://grepmind.sritechhub.com/api';
 
 export default function MetricsDashboardDrawer({ open, onClose }) {
   const { accessToken, user } = useContext(AuthContext);
   const role = user?.role || 'viewer';
+  const headers = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
 
   const [dashboards, setDashboards] = useState([]);
-  const [selectedDashboard, setSelectedDashboard] = useState(null);
-  const [panelData, setPanelData] = useState({});
+  const [selected, setSelected] = useState(null);
+  const [addingPanelFor, setAddingPanelFor] = useState(null);
+  const [status, setStatus] = useState('');
 
-  const fetchDashboards = async () => {
+  const load = async () => {
     if (!accessToken) return;
     try {
-      const res = await axios.get(`${API}/analytics/dashboards`, {
-        headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
-      });
+      setStatus('Loading…');
+      const res = await axios.get(`${API}/analytics/dashboards`, { headers });
       setDashboards(res.data);
+      setStatus('');
     } catch (e) {
-      console.error(e);
+      setStatus('Failed: ' + (e.response?.data?.error || e.message));
     }
   };
 
-  const fetchPanelQuery = async (panelId, query) => {
+  useEffect(() => { if (open) load(); }, [open]);
+
+  const createDash = async () => {
+    const name = prompt('Dashboard name');
+    if (!name) return;
     try {
-      const res = await axios.post(`${API}/analytics/query`, { query }, {
-        headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
-      });
-      setPanelData(prev => ({ ...prev, [panelId]: res.data.data }));
+      await axios.post(`${API}/analytics/dashboards`, { name }, { headers });
+      await load();
     } catch (e) {
-      console.error(e);
+      alert('Create failed: ' + (e.response?.data?.details || e.message));
     }
   };
 
-  useEffect(() => { if (open) fetchDashboards(); }, [open]);
+  const removeDash = async (id) => {
+    if (!confirm('Delete dashboard?')) return;
+    try {
+      await axios.delete(`${API}/analytics/dashboards/${id}`, { headers });
+      await load();
+    } catch (e) {
+      alert('Delete failed: ' + (e.response?.data?.details || e.message));
+    }
+  };
 
   return open ? (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full sm:w-[32rem] bg-white shadow-xl overflow-y-auto">
+      <div className="absolute right-0 top-0 h-full w-full sm:w-[36rem] bg-white shadow-xl overflow-y-auto">
         <div className="px-4 py-3 bg-indigo-700 text-white">
           <div className="text-sm">Metrics Dashboards</div>
           <div className="text-lg font-semibold truncate">Role: {role}</div>
         </div>
+
         <div className="p-6 space-y-4">
-          {role === 'admin' && (
-            <button
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white"
-              onClick={async () => {
-                const name = prompt('Dashboard name?');
-                if (!name) return;
-                await axios.post(`${API}/analytics/dashboards`, { name }, {
-                  headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
-                });
-                fetchDashboards();
-              }}
-            >
-              + New Dashboard
-            </button>
-          )}
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-500">{status}</div>
+            {['admin','editor'].includes(role) && (
+              <button onClick={createDash} className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+                + New Dashboard
+              </button>
+            )}
+          </div>
 
           {dashboards.map(d => (
-            <div key={d.id} className="border p-3 rounded-lg shadow-sm space-y-3">
-              <div className="flex justify-between items-center">
+            <div key={d.id} className="border rounded-2xl p-4 bg-white shadow space-y-3">
+              <div className="flex items-center justify-between">
                 <div className="font-semibold">{d.name}</div>
-                {role === 'admin' && (
-                  <div className="flex gap-2">
-                    <button className="text-green-600" onClick={() => setSelectedDashboard(d)}>Edit Panels</button>
-                    <button className="text-red-500" onClick={async () => {
-                      await axios.delete(`${API}/analytics/dashboards/${d.id}`, {
-                        headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
-                      });
-                      fetchDashboards();
-                    }}>Delete</button>
-                  </div>
-                )}
-              </div>
-              {d.panels?.map(p => (
-                <div key={p.id}>
-                  <div className="text-sm font-medium">{p.title}</div>
-                  <ResponsiveContainer width="100%" height={150}>
-                    <LineChart data={panelData[p.id] || []}>
-                      <XAxis dataKey="time" />
-                      <YAxis />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="value" stroke={p.thresholds?.warning ? '#FBBF24' : '#4F46E5'} strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  {!panelData[p.id] && fetchPanelQuery(p.id, p.query)}
+                <div className="flex gap-2">
+                  {['admin','editor'].includes(role) && (
+                    <button onClick={() => setAddingPanelFor(d)} className="px-3 py-1 rounded-lg bg-green-600 text-white">+ Panel</button>
+                  )}
+                  {role === 'admin' && (
+                    <button onClick={() => removeDash(d.id)} className="px-3 py-1 rounded-lg bg-red-600 text-white">Delete</button>
+                  )}
                 </div>
-              ))}
+              </div>
+
+              {/* Simple, lightweight panel renders (fetch-by-click via explorer is built-in). 
+                 For production charts you likely have a dedicated panel grid view page. */}
+              {d.panels?.length ? (
+                <ul className="list-disc pl-5 text-sm text-gray-600">
+                  {d.panels.map(p => (
+                    <li key={p.id}><span className="font-medium">{p.title}</span> — <code>{p.promql}</code> ({p.chartType})</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-sm text-gray-400">No panels yet.</div>
+              )}
             </div>
           ))}
 
-          {selectedDashboard && <PanelForm dashboard={selectedDashboard} onClose={() => { setSelectedDashboard(null); fetchDashboards(); }} />}
+          {/* PromQL scratchpad */}
           <PromQLExplorer />
         </div>
+
         <div className="p-4 flex justify-end">
-          <button className="px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800" onClick={onClose}>Close</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800">
+            Close
+          </button>
         </div>
       </div>
+
+      {addingPanelFor && (
+        <PanelForm
+          dashboard={addingPanelFor}
+          onClose={() => setAddingPanelFor(null)}
+          onSaved={load}
+        />
+      )}
     </div>
   ) : null;
 }

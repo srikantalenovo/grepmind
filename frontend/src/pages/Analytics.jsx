@@ -19,6 +19,7 @@ export default function Analytics() {
   // ADD THIS
   const [metricsOpen, setMetricsOpen] = useState(false);
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [dashboardDrawerOpen, setDashboardDrawerOpen] = useState(false);
 
 
   const [cluster, setCluster] = useState(null);
@@ -103,7 +104,16 @@ export default function Analytics() {
             >
               Manage Dashboards
             </button>
-          )} 
+          )}
+
+          {role === 'admin' && (
+            <button
+              onClick={() => setDashboardDrawerOpen(true)}
+              className="px-3 py-2 rounded-xl border shadow bg-white"
+            >
+              📊 Create Dashboard
+            </button>
+          )}           
         </div>
       </div>
 
@@ -233,6 +243,11 @@ export default function Analytics() {
         open={dashboardDrawerOpen}
         onClose={() => setDashboardDrawerOpen(false)}
       /> */}
+      <MetricsDashboardDrawer
+        open={dashboardDrawerOpen}
+        onClose={() => setDashboardDrawerOpen(false)}
+      />
+
       {metricsOpen && <MetricsDashboardDrawer open={metricsOpen} onClose={() => setMetricsOpen(false)} />}
       {dashboardOpen && <DashboardDrawer open={dashboardOpen} onClose={() => setDashboardOpen(false)} />}
     </div>

@@ -61,103 +61,35 @@ END$$;
 
 -- Prisma Migration: add DataSource model
 -- Adjust table/constraint names if you use snake_case mapping.
-
-CREATE TABLE "DataSource" (
+-- init.sql
+CREATE TABLE IF NOT EXISTS "Dashboard" (
   "id" SERIAL PRIMARY KEY,
-  "type" TEXT NOT NULL,
-  "url"  TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "description" TEXT NULL,
   "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- uniq by type to allow upsert
-CREATE UNIQUE INDEX "DataSource_type_key" ON "DataSource"("type");
-
--- trigger to update updatedAt (Postgres)
-CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW."updatedAt" = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS set_updated_at_on_datasource ON "DataSource";
-CREATE TRIGGER set_updated_at_on_datasource
-BEFORE UPDATE ON "DataSource"
-FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
-
-
-
--- Table for storing dashboards
-CREATE TABLE IF NOT EXISTS "MetricsDashboard" (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),  -- cuid equivalent
-    name TEXT NOT NULL,
-    panels JSON NOT NULL,
-    "createdBy" TEXT NOT NULL,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "Panel" (
+  "id" SERIAL PRIMARY KEY,
+  "title" TEXT NOT NULL,
+  "promql" TEXT NOT NULL,
+  "chartType" TEXT NOT NULL,
+  "thresholds" JSONB NOT NULL DEFAULT '{}',
+  "layout" JSONB NOT NULL DEFAULT '{}',
+  "visualizationConfig" JSONB NOT NULL DEFAULT '{}',
+  "dashboardId" INTEGER NOT NULL REFERENCES "Dashboard"("id") ON DELETE CASCADE
 );
 
--- Table for storing panels
-CREATE TABLE IF NOT EXISTS "MetricsPanel" (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),  -- cuid equivalent
-    "dashboardId" TEXT NOT NULL REFERENCES "MetricsDashboard"(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    query TEXT NOT NULL,
-    "chartType" TEXT NOT NULL,
-    thresholds JSON,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "DataSource" (
+  "id" SERIAL PRIMARY KEY,
+  "type" TEXT UNIQUE NOT NULL,
+  "url" TEXT NOT NULL,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-
--- Create Dashboard and Panel tables matching schema.prisma
-
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- DASHBOARD TABLE
-CREATE TABLE "Dashboard" (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
--- PANEL TABLE
-CREATE TABLE "Panel" (
-    id SERIAL PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    promql TEXT NOT NULL,
-    "chartType" VARCHAR(100) NOT NULL,
-    thresholds JSONB NOT NULL,
-    "dashboardId" INT NOT NULL,
-    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT fk_dashboard FOREIGN KEY ("dashboardId")
-      REFERENCES "Dashboard"(id) ON DELETE CASCADE
-);
-
--- Indexes for performance
-CREATE INDEX idx_dashboard_name ON "Dashboard"(name);
-CREATE INDEX idx_panel_dashboardId ON "Panel"("dashboardId");
-
--- Trigger function to update updatedAt automatically
-CREATE OR REPLACE FUNCTION update_updatedAt_column()
-RETURNS TRIGGER AS $$
-BEGIN
-   NEW."updatedAt" = NOW();
-   RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Attach triggers
-CREATE TRIGGER update_dashboard_updatedAt
-BEFORE UPDATE ON "Dashboard"
-FOR EACH ROW
-EXECUTE PROCEDURE update_updatedAt_column();
-
-CREATE TRIGGER update_panel_updatedAt
-BEFORE UPDATE ON "Panel"
-FOR EACH ROW
-EXECUTE PROCEDURE update_updatedAt_column();
+-- Upsert default DataSource row for Prometheus (empty URL by default)
+INSERT INTO "DataSource" ("type","url")
+VALUES ('prometheus','')
+ON CONFLICT ("type") DO NOTHING;

@@ -1,4 +1,5 @@
-import React, { useState, useContext } from 'react';
+// src/components/PromQLExplorer.jsx
+import React, { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 
@@ -8,39 +9,40 @@ export default function PromQLExplorer() {
   const { accessToken, user } = useContext(AuthContext);
   const role = user?.role || 'viewer';
 
-  const [query, setQuery] = useState('');
-  const [result, setResult] = useState([]);
+  const [query, setQuery] = useState('up');
+  const [result, setResult] = useState(null);
+  const [status, setStatus] = useState('');
 
-  const runQuery = async () => {
+  const run = async () => {
     try {
-      const res = await axios.post(`${API}/analytics/query`, { query }, {
-        headers: { Authorization: `Bearer ${accessToken}`, 'x-user-role': role },
-      });
-      setResult(res.data.data || []);
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || err.message);
+      setStatus('Running…');
+      const headers = { Authorization: `Bearer ${accessToken}`, 'x-user-role': role };
+      const res = await axios.post(`${API}/analytics/query`, { query }, { headers });
+      setResult(res.data.data);
+      setStatus('OK');
+    } catch (e) {
+      setResult(null);
+      setStatus('Failed: ' + (e.response?.data?.details || e.message));
     }
   };
 
   return (
-    <div className="border p-4 rounded-lg bg-gray-50 mt-4">
-      <h3 className="font-semibold mb-2">PromQL Explorer</h3>
+    <div className="border rounded-2xl p-4 space-y-3 bg-white shadow">
+      <div className="font-semibold">PromQL Explorer</div>
       <input
-        className="w-full border px-2 py-1 rounded mb-2"
-        placeholder="Enter PromQL query"
+        className="w-full border rounded-xl px-3 py-2"
+        placeholder="PromQL query"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={e => setQuery(e.target.value)}
       />
-      <button className="px-3 py-1 bg-blue-600 text-white rounded" onClick={runQuery}>
-        Run Query
-      </button>
-      {result.length > 0 && (
-        <div className="mt-2 text-sm">
-          {result.map((r, idx) => (
-            <div key={idx}>{JSON.stringify(r)}</div>
-          ))}
-        </div>
+      <div className="flex gap-2">
+        <button onClick={run} className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+          Run
+        </button>
+        <span className="text-sm text-gray-500">{status}</span>
+      </div>
+      {result && (
+        <pre className="text-xs bg-gray-50 p-3 rounded-xl overflow-x-auto">{JSON.stringify(result, null, 2)}</pre>
       )}
     </div>
   );
