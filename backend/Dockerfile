@@ -47,7 +47,7 @@ RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install yaml js-yaml node-fetch axios
+RUN npm install yaml js-yaml node-fetch
 
 COPY . .
 
